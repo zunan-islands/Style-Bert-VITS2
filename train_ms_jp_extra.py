@@ -494,7 +494,8 @@ def run():
             batch_size=1,
             pin_memory=True,
             drop_last=False,
-            collate_fn=collate_fn,
+            # 評価用のデータセットは MAS の範囲を返さないので、範囲を足す束ね方ではなく元の束ね方を使う
+            collate_fn=TextAudioSpeakerCollate(use_jp_extra=True),
         )
     if hps.model.use_noise_scaled_mas is True:
         logger.info("Using noise scaled MAS for VITS2")
