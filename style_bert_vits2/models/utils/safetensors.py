@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any
 
@@ -182,4 +183,7 @@ def save_safetensors(
     new_dict["iteration"] = torch.LongTensor([iteration])
     logger.info(f"Saved safetensors to {checkpoint_path}")
 
-    save_file(new_dict, checkpoint_path)
+    # 一時ファイルへ書き終えてから差し替え、書き込み途中のファイルを正規の名前で読まれないようにする
+    temporary_path = f"{checkpoint_path}.tmp"
+    save_file(new_dict, temporary_path)
+    os.replace(temporary_path, checkpoint_path)

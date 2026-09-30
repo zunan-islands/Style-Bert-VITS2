@@ -136,7 +136,7 @@ def save_checkpoint(
         state_dict = model.module.state_dict()  # type: ignore
     else:
         state_dict = model.state_dict()
-    torch.save(
+    save_torch_atomically(
         {
             "model": state_dict,
             "iteration": iteration,
@@ -144,6 +144,110 @@ def save_checkpoint(
             "learning_rate": learning_rate,
         },
         checkpoint_path,
+    )
+
+
+def save_torch_atomically(obj: Any, path: str | Path) -> None:
+    """
+    一時ファイルへ書き終えてから差し替えて保存する。
+    書き込みの途中で学習が止まっても、壊れたチェックポイントが正規の名前で残らないようにするため。
+
+    Args:
+        obj (Any): 保存するオブジェクト
+        path (str | Path): 保存先のパス
+    """
+
+    temporary_path = f"{path}.tmp"
+    torch.save(obj, temporary_path)
+    os.replace(temporary_path, path)
+
+
+def save_resume_marker(
+    model_dir_path: str | Path, global_step: int, state: dict[str, Any]
+) -> None:
+    """
+    そのステップの再開用チェックポイント一式 (G・D・DUR・WD・EMA) を書き終えた印と、続きから学習するための情報を保存する。
+    一式の保存の最後に呼ぶことで、印のあるステップは全ての部品が揃っていることを保証する。
+
+    Args:
+        model_dir_path (str | Path): チェックポイントの保存先
+        global_step (int): チェックポイントのファイル名に使ったステップ数
+        state (dict[str, Any]): 次に学習するステップ数・エポック・エポック内で済んだバッチ数・乱数の状態
+    """
+
+    save_torch_atomically(
+        state, os.path.join(str(model_dir_path), f"RESUME_{global_step}.pth")
+    )
+
+
+def load_resume_state(
+    model_dir_path: str | Path,
+    components: list[tuple[str, torch.nn.Module, torch.optim.Optimizer | None]],
+    skip_optimizer: bool = False,
+) -> tuple[int, int, dict[str, float], dict[str, Any] | None]:
+    """
+    再開に使うチェックポイント一式を、揃っていて読める最新のステップから読み込む。
+    再開の印 (RESUME_*.pth) があるステップを優先し、印の無い以前の学習は全部品が揃った最新のステップを選ぶ。
+    読み込みに失敗したステップは飛ばして1つ前へ戻り、どのステップも読めなければ例外を出す (ゼロからの学習へ黙って落ちない)。
+
+    Args:
+        model_dir_path (str | Path): チェックポイントの保存先
+        components (list[tuple[str, torch.nn.Module, torch.optim.Optimizer | None]]): (ファイル名の接頭辞, モデル, オプティマイザー) の並び。先頭は G
+        skip_optimizer (bool): オプティマイザーの状態を読まないか
+
+    Returns:
+        tuple[int, int, dict[str, float], dict[str, Any] | None]: (ステップ, エポック, 接頭辞ごとの学習率, 再開の印の中身。印が無ければ None)
+
+    Raises:
+        RuntimeError: 読み込めるステップが1つも無い場合
+    """
+
+    def steps_of(prefix: str) -> set[int]:
+        steps = set()
+        for path in glob.glob(os.path.join(str(model_dir_path), f"{prefix}_*.pth")):
+            match = re.fullmatch(rf"{prefix}_(\d+)\.pth", os.path.basename(path))
+            if match is not None:
+                steps.add(int(match.group(1)))
+        return steps
+
+    prefixes = [prefix for prefix, _, _ in components]
+    complete_steps = set.intersection(*(steps_of(prefix) for prefix in prefixes))
+    marked_steps = complete_steps & steps_of("RESUME")
+    # 印のあるステップを新しい順に試し、その後で印の無い (以前の版で保存した) ステップを新しい順に試す
+    candidates = sorted(marked_steps, reverse=True) + sorted(
+        complete_steps - marked_steps, reverse=True
+    )
+    errors: list[str] = []
+    for step in candidates:
+        try:
+            marker_path = os.path.join(str(model_dir_path), f"RESUME_{step}.pth")
+            marker = (
+                torch.load(marker_path, map_location="cpu", weights_only=False)
+                if step in marked_steps
+                else None
+            )
+            epoch = 0
+            learning_rates: dict[str, float] = {}
+            for prefix, model, optimizer in components:
+                _, _, learning_rate, epoch_of_component = load_checkpoint(
+                    os.path.join(str(model_dir_path), f"{prefix}_{step}.pth"),
+                    model,
+                    optimizer,
+                    skip_optimizer=skip_optimizer,
+                )
+                learning_rates[prefix] = learning_rate
+                if prefix == prefixes[0]:
+                    epoch = epoch_of_component
+            return step, epoch, learning_rates, marker
+        except Exception as ex:
+            # 書き込みの途中で止まった版などで読めないステップは飛ばし、1つ前の一式から再開する
+            logger.warning(
+                f"Failed to load the checkpoints of step {step}, trying an older step: {ex}"
+            )
+            errors.append(f"step {step}: {ex}")
+    raise RuntimeError(
+        f"No loadable checkpoint set ({', '.join(prefixes)}) was found in {model_dir_path}. "
+        + "; ".join(errors)
     )
 
 
@@ -168,7 +272,8 @@ def clean_checkpoints(
     ]
 
     def name_key(_f: str) -> int:
-        return int(re.compile("._(\\d+)\\.pth").match(_f).group(1))  # type: ignore
+        # 接頭辞は G・D の1文字だけでなく WD・DUR・EMA・RESUME もあるので、英大文字の並びとして読む
+        return int(re.compile("[A-Z]+_(\\d+)\\.pth").match(_f).group(1))  # type: ignore
 
     def time_key(_f: str) -> float:
         return os.path.getmtime(os.path.join(model_dir_path, _f))
@@ -177,7 +282,11 @@ def clean_checkpoints(
 
     def x_sorted(_x: str) -> list[str]:
         return sorted(
-            [f for f in ckpts_files if f.startswith(_x) and not f.endswith("_0.pth")],
+            [
+                f
+                for f in ckpts_files
+                if f.startswith(_x) and f.endswith(".pth") and not f.endswith("_0.pth")
+            ],
             key=sort_key,
         )
 
@@ -188,7 +297,13 @@ def clean_checkpoints(
             + x_sorted("D_")[:-n_ckpts_to_keep]
             + x_sorted("WD_")[:-n_ckpts_to_keep]
             + x_sorted("DUR_")[:-n_ckpts_to_keep]
+            + x_sorted("EMA_")[:-n_ckpts_to_keep]
+            + x_sorted("RESUME_")[:-n_ckpts_to_keep]
         )
+    ]
+    # 書き込みの途中で止まった一時ファイルも残さない
+    to_del += [
+        os.path.join(model_dir_path, f) for f in ckpts_files if f.endswith(".pth.tmp")
     ]
 
     def del_info(fn: str) -> None:

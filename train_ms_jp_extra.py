@@ -93,7 +93,7 @@ from training.runtime import (
     EMAModel,
     TrainRuntimeConfig,
 )
-from training.utils import check_git_hash, get_steps, is_resuming, summarize
+from training.utils import check_git_hash, is_resuming, summarize
 
 
 if TYPE_CHECKING:
@@ -118,6 +118,8 @@ torch.backends.cuda.enable_mem_efficient_sdp(True)
 torch.backends.cuda.enable_math_sdp(True)
 
 global_step = 0
+# エポックの途中から再開したとき、そのエポックで学習済みの先頭のバッチ数 (最初のエポックだけ飛ばす)
+resume_skip_batches = 0
 
 api = HfApi()
 
@@ -307,7 +309,7 @@ def run():
     torch.manual_seed(hps.train.seed)
     torch.cuda.set_device(local_rank)
 
-    global global_step
+    global global_step, resume_skip_batches
     writer = None
     writer_eval = None
     if rank == 0 and not args.speedup:
@@ -530,90 +532,53 @@ def run():
             #  bucket_cap_mb=512
         )
 
+    resume_step: int | None = None
+    resume_marker: dict[str, Any] | None = None
     if is_resuming(model_dir):
+        # 再開用のチェックポイント一式 (G・D・DUR・WD) を、揃っていて読める最新のステップから読み込む
+        ## 書き込み途中で止まった版は飛ばして1つ前へ戻り、どれも読めなければ例外で止める (事前学習モデルすら読まないゼロからの学習へ黙って落とさない)
+        resume_components: list[
+            tuple[str, torch.nn.Module, torch.optim.Optimizer | None]
+        ] = [
+            ("G", net_g, optim_g),
+            ("D", net_d, optim_d),
+        ]
         if net_dur_disc is not None:
-            # チェックポイントが見つからない場合のデフォルト学習率
-            dur_resume_lr = hps.train.learning_rate
-            try:
-                _, _, dur_resume_lr, epoch_str = utils.checkpoints.load_checkpoint(
-                    utils.checkpoints.get_latest_checkpoint_path(
-                        model_dir, "DUR_*.pth"
-                    ),
-                    net_dur_disc,
-                    optim_dur_disc,
-                    skip_optimizer=hps.train.skip_optimizer,
-                )
-                assert optim_dur_disc is not None
-                if not optim_dur_disc.param_groups[0].get("initial_lr"):
-                    optim_dur_disc.param_groups[0]["initial_lr"] = dur_resume_lr
-            except Exception as ex:
-                # チェックポイントのロードに失敗した場合、デフォルト学習率で初期化
-                logger.warning(f"Failed to load DUR checkpoint: {ex}")
-                assert optim_dur_disc is not None
-                if not optim_dur_disc.param_groups[0].get("initial_lr"):
-                    optim_dur_disc.param_groups[0]["initial_lr"] = dur_resume_lr
-                logger.info("Initialize dur_disc with default learning rate")
+            resume_components.append(("DUR", net_dur_disc, optim_dur_disc))
         if net_wd is not None:
-            # チェックポイントが見つからない場合のデフォルト学習率
-            wd_resume_lr = hps.train.learning_rate
-            try:
-                _, optim_wd, wd_resume_lr, epoch_str = (
-                    utils.checkpoints.load_checkpoint(
-                        utils.checkpoints.get_latest_checkpoint_path(
-                            model_dir, "WD_*.pth"
-                        ),
-                        net_wd,
-                        optim_wd,
-                        skip_optimizer=hps.train.skip_optimizer,
-                    )
-                )
-                assert optim_wd is not None
-                if not optim_wd.param_groups[0].get("initial_lr"):
-                    optim_wd.param_groups[0]["initial_lr"] = wd_resume_lr
-            except Exception as ex:
-                # チェックポイントのロードに失敗した場合、デフォルト学習率で初期化
-                logger.warning(f"Failed to load WD checkpoint: {ex}")
-                assert optim_wd is not None
-                if not optim_wd.param_groups[0].get("initial_lr"):
-                    optim_wd.param_groups[0]["initial_lr"] = wd_resume_lr
-                logger.info("Initialize wavlm with default learning rate")
-
-        try:
-            _, optim_g, g_resume_lr, epoch_str = utils.checkpoints.load_checkpoint(
-                utils.checkpoints.get_latest_checkpoint_path(model_dir, "G_*.pth"),
-                net_g,
-                optim_g,
+            resume_components.append(("WD", net_wd, optim_wd))
+        resume_step, resume_epoch, resume_learning_rates, resume_marker = (
+            utils.checkpoints.load_resume_state(
+                model_dir,
+                resume_components,
                 skip_optimizer=hps.train.skip_optimizer,
             )
-            _, optim_d, d_resume_lr, epoch_str = utils.checkpoints.load_checkpoint(
-                utils.checkpoints.get_latest_checkpoint_path(model_dir, "D_*.pth"),
-                net_d,
-                optim_d,
-                skip_optimizer=hps.train.skip_optimizer,
-            )
-            if not optim_g.param_groups[0].get("initial_lr"):
-                optim_g.param_groups[0]["initial_lr"] = g_resume_lr
-            if not optim_d.param_groups[0].get("initial_lr"):
-                optim_d.param_groups[0]["initial_lr"] = d_resume_lr
-
-            epoch_str = max(epoch_str, 1)
-            # global_step = (epoch_str - 1) * len(train_loader)
-            steps = get_steps(
-                utils.checkpoints.get_latest_checkpoint_path(model_dir, "G_*.pth")
-            )
-            if steps is None:
-                raise ValueError("Failed to parse global step from checkpoint path.")
-            global_step = steps
-            logger.info(
-                f"******************Found the model. Current epoch is {epoch_str}, global step is {global_step}*********************"
-            )
-        except Exception as e:
-            logger.warning(e)
-            logger.warning(
-                "It seems that you are not using the pretrained models, so we will train from scratch."
-            )
-            epoch_str = 1
-            global_step = 0
+        )
+        # スケジューラーが初期学習率を参照するので、読み込んだ学習率を補う
+        for prefix, _, optimizer in resume_components:
+            if optimizer is not None and not optimizer.param_groups[0].get(
+                "initial_lr"
+            ):
+                optimizer.param_groups[0]["initial_lr"] = resume_learning_rates[prefix]
+        if resume_marker is not None:
+            # 再開の印があれば、保存した時点の次のステップ・エポック・エポック内で済んだバッチ数からそのまま続ける
+            epoch_str = int(resume_marker["epoch"])
+            global_step = int(resume_marker["next_global_step"])
+            resume_skip_batches = int(resume_marker["batches_done"])
+        else:
+            # 印の無い以前の版のチェックポイントは、ファイル名のステップまで学習済みとみなして次のステップから続ける
+            epoch_str = max(resume_epoch, 1)
+            global_step = resume_step + 1
+            resume_skip_batches = global_step - (epoch_str - 1) * len(train_loader)
+            if resume_skip_batches < 0:
+                resume_skip_batches = 0
+        # エポックを全て終えた時点の一式なら、次のエポックの頭から始める
+        if resume_skip_batches >= len(train_loader):
+            epoch_str += 1
+            resume_skip_batches = 0
+        logger.info(
+            f"******************Found the model. Current epoch is {epoch_str}, global step is {global_step}, skipping {resume_skip_batches} batches already trained in this epoch*********************"
+        )
     else:
         try:
             _ = utils.safetensors.load_safetensors(
@@ -716,8 +681,13 @@ def run():
 
     if ema_model is not None:
         try:
-            ema_path = utils.checkpoints.get_latest_checkpoint_path(
-                model_dir, "EMA_*.pth"
+            # 再開したときは、G・D と同じステップの EMA を読む
+            ema_path = (
+                os.path.join(model_dir, f"EMA_{resume_step}.pth")
+                if resume_step is not None
+                else utils.checkpoints.get_latest_checkpoint_path(
+                    model_dir, "EMA_*.pth"
+                )
             )
             try:
                 ema_state = torch.load(
@@ -748,6 +718,13 @@ def run():
         if writer is not None and writer_eval is not None
         else None
     )
+    # 保存した時点の乱数の状態へ戻し、中断しなかった場合と同じ乱数で続きを学習する
+    if resume_marker is not None and "rng" in resume_marker:
+        torch.set_rng_state(resume_marker["rng"]["torch"])
+        torch.cuda.set_rng_state_all(resume_marker["rng"]["cuda"])
+        logger.info(
+            "Restored the random number generator states saved with the checkpoint."
+        )
     for epoch in range(epoch_str, hps.train.epochs + 1):
         if rank == 0:
             train_and_evaluate(
@@ -830,6 +807,20 @@ def run():
                     epoch,
                     os.path.join(model_dir, f"WD_{global_step}.pth"),
                 )
+            # 最後のエポックを終えた一式の印を書く (エポック内のバッチは全て済んでいる)
+            utils.checkpoints.save_resume_marker(
+                model_dir,
+                global_step,
+                {
+                    "epoch": epoch,
+                    "next_global_step": global_step,
+                    "batches_done": len(train_loader),
+                    "rng": {
+                        "torch": torch.get_rng_state(),
+                        "cuda": torch.cuda.get_rng_state_all(),
+                    },
+                },
+            )
             # EMA が有効な場合は EMA 重みを保存
             model_to_save = (
                 ema_model.get_ema_model() if ema_model is not None else net_g
@@ -906,7 +897,7 @@ def train_and_evaluate(
 
     # マルチ GPU 学習は基本行わないため、DistributedBucketSampler でのシャッフルを固定して再現性を優先する
     # train_loader.batch_sampler.set_epoch(epoch)
-    global global_step
+    global global_step, resume_skip_batches
 
     net_g.train()
     net_d.train()
@@ -931,6 +922,9 @@ def train_and_evaluate(
         bert,
         style_vec,
     ) in enumerate(train_loader):
+        # エポックの途中から再開したときは、中断前に学習済みの先頭のバッチを飛ばす (毎エポック同じ順に並ぶので、飛ばせば中断前と同じ順で続く)
+        if batch_idx < resume_skip_batches:
+            continue
         if net_g.module.use_noise_scaled_mas:
             current_mas_noise_scale = (
                 net_g.module.mas_noise_scale_initial
@@ -1385,12 +1379,26 @@ def train_and_evaluate(
                         "state_dict": ema_model.state_dict(),
                         "decay": ema_model.decay,
                     }
-                    torch.save(
+                    utils.checkpoints.save_torch_atomically(
                         ema_state,
                         os.path.join(
                             runtime_config.model_dir, f"EMA_{global_step}.pth"
                         ),
                     )
+                # 一式を書き終えた印として、次に学習するステップ・エポック内で済んだバッチ数・乱数の状態を最後に保存する
+                utils.checkpoints.save_resume_marker(
+                    runtime_config.model_dir,
+                    global_step,
+                    {
+                        "epoch": epoch,
+                        "next_global_step": global_step + 1,
+                        "batches_done": batch_idx + 1,
+                        "rng": {
+                            "torch": torch.get_rng_state(),
+                            "cuda": torch.cuda.get_rng_state_all(),
+                        },
+                    },
+                )
                 if runtime_config.keep_ckpts > 0:
                     utils.checkpoints.clean_checkpoints(
                         model_dir_path=runtime_config.model_dir,
@@ -1433,6 +1441,8 @@ def train_and_evaluate(
                 f"Epoch {epoch}({100.0 * batch_idx / len(train_loader):.0f}%)/{hps.train.epochs}"
             )
             pbar.update()
+    # 読み飛ばしは再開した最初のエポックだけで、次のエポックからは先頭から学習する
+    resume_skip_batches = 0
     # 本家ではこれをスピードアップのために消すと書かれていたので、一応消してみる
     # と思ったけどメモリ使用量が減るかもしれないのでつけてみる
     gc.collect()
