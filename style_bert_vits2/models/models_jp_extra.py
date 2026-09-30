@@ -1094,6 +1094,7 @@ class SynthesizerTrn(nn.Module):
         language: torch.Tensor,
         bert: torch.Tensor,
         style_vec: torch.Tensor,
+        mas_allowed: torch.Tensor | None = None,
     ) -> tuple[
         torch.Tensor,
         torch.Tensor,
@@ -1138,6 +1139,11 @@ class SynthesizerTrn(nn.Module):
                     * self.current_mas_noise_scale
                 )
                 neg_cent = neg_cent + epsilon
+            # 強制アライメントで決めた音素の範囲 ([b, t_t, t_s] の 0/1) が渡されたら、その外を通れないようにする
+            ## maximum_path はマスクを長さの計算にしか使わないので、範囲の外はスコアを大きな負の値にして塞ぐ
+            unconstrained_neg_cent = neg_cent
+            if mas_allowed is not None:
+                neg_cent = neg_cent.masked_fill(mas_allowed == 0, -1e9)
 
             attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
             attn = (
@@ -1145,6 +1151,23 @@ class SynthesizerTrn(nn.Module):
                 .unsqueeze(1)
                 .detach()
             )
+            # 範囲の中で解けなかった発話 (どれかのトークンが 0 フレーム、またはフレームを使い切れていない) だけ、範囲を絞らない MAS に戻す
+            if mas_allowed is not None:
+                durations = attn.sum(2)
+                is_feasible = ((durations + (1 - x_mask)).amin(dim=(1, 2)) >= 1) & (
+                    durations.sum(dim=(1, 2)) == y_mask.sum(dim=(1, 2))
+                )
+                if bool(is_feasible.all()) is False:
+                    fallback_attn = (
+                        monotonic_alignment.maximum_path(
+                            unconstrained_neg_cent, attn_mask.squeeze(1)
+                        )
+                        .unsqueeze(1)
+                        .detach()
+                    )
+                    attn = torch.where(
+                        is_feasible.view(-1, 1, 1, 1), attn, fallback_attn
+                    )
 
         w = attn.sum(2)
 

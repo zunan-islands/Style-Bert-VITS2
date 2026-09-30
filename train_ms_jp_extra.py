@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import gc
+import math
 import os
 import platform
 from contextlib import nullcontext
@@ -117,6 +118,81 @@ torch.backends.cuda.enable_mem_efficient_sdp(True)
 # Math Attention: 上記が使えない場合の最終フォールバック
 torch.backends.cuda.enable_math_sdp(True)
 
+
+class TextAudioSpeakerLoaderWithMASSpans(TextAudioSpeakerLoader):
+    """発話ごとに、強制アライメントで求めた音素ごとのフレーム範囲 (<音声>.domino_spans.pt) を末尾に付けて返すデータセット。"""
+
+    def __getitem__(self, index: int) -> tuple[Any, ...]:
+        """
+        元のデータに、音素ごとの [開始, 終了) フレームを付けて返す。範囲のファイルが無い発話は None を付ける。
+
+        Args:
+            index (int): データインデックス
+
+        Returns:
+            tuple[Any, ...]: 元のデータタプルの末尾に範囲を足したもの
+        """
+
+        sample = super().__getitem__(index)
+        spans_path = Path(f"{self.audiopaths_sid_text[index][0]}.domino_spans.pt")
+        spans = torch.load(spans_path).float() if spans_path.is_file() else None
+        return (*sample, spans)
+
+
+class CollateWithMASSpans:
+    """元の束ね方の結果の末尾に、MAS が通れる範囲の行列 [b, フレーム, トークン] を足す。"""
+
+    def __init__(self, base_collate: TextAudioSpeakerCollate, tolerance: int) -> None:
+        """
+        Args:
+            base_collate (TextAudioSpeakerCollate): 元の束ね方
+            tolerance (int): 強制アライメントの境目から外へ許すフレーム数
+        """
+
+        # 元の束ね方 (データの並べ替えと詰め物はこちらに任せる)
+        self.base_collate = base_collate
+        # 境目の余裕のフレーム数
+        self.tolerance = tolerance
+
+    def __call__(self, batch: list[tuple[Any, ...]]) -> tuple[Any, ...]:
+        """
+        元の束ね方と同じ並び (スペクトログラムの長い順) で、発話ごとに MAS が通れる範囲を 0/1 で作る。
+        音素 k のトークン (2k+1) と前後の空白トークンは、音素 k の範囲の前後 tolerance フレームだけを通れる。範囲が無い発話は全て通れる。
+
+        Args:
+            batch (list[tuple[Any, ...]]): 範囲付きのデータサンプルのリスト
+
+        Returns:
+            tuple[Any, ...]: 元の束ねた結果の末尾に、通れる範囲の行列を足したもの
+        """
+
+        core = [sample[:-1] for sample in batch]
+        spans = [sample[-1] for sample in batch]
+        collated = self.base_collate(core)
+        # 元の束ね方と同じ規則で並べ替えた順に範囲を並べる
+        _, order = torch.sort(
+            torch.LongTensor([sample[1].size(1) for sample in core]),
+            dim=0,
+            descending=True,
+        )
+        max_text_len = max(len(sample[0]) for sample in core)
+        max_spec_len = max(sample[1].size(1) for sample in core)
+        allowed = torch.zeros(len(core), max_spec_len, max_text_len)
+        for row, index in enumerate(order.tolist()):
+            sample_spans = spans[index]
+            token_count = len(core[index][0])
+            frame_count = core[index][1].size(1)
+            # 範囲が無い、または音素数が合わない発話は絞らない
+            if sample_spans is None or token_count != 2 * sample_spans.shape[0] + 1:
+                allowed[row] = 1
+                continue
+            for phone_index, (start, end) in enumerate(sample_spans.tolist()):
+                lower = max(0, math.floor(start) - self.tolerance)
+                upper = min(frame_count, math.ceil(end) + self.tolerance)
+                allowed[row, lower:upper, 2 * phone_index : 2 * phone_index + 3] = 1
+        return (*collated, allowed)
+
+
 global_step = 0
 # エポックの途中から再開したとき、そのエポックで学習済みの先頭のバッチ数 (最初のエポックだけ飛ばす)
 resume_skip_batches = 0
@@ -158,6 +234,12 @@ def run():
         "--skip_default_style",
         action="store_true",
         help="Skip saving default style config and mean vector.",
+    )
+    parser.add_argument(
+        "--mas_span_tolerance",
+        type=int,
+        default=-1,
+        help="Restrict MAS to the forced-alignment span of each phone (<audio>.domino_spans.pt) widened by this many frames. Disabled when negative.",
     )
     parser.add_argument(
         "--no_progress_bar",
@@ -318,13 +400,29 @@ def run():
         check_git_hash(model_dir)
         writer = SummaryWriter(log_dir=model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(model_dir, "eval"))
-    train_dataset = TextAudioSpeakerLoader(
-        hps.data.training_files,
-        hps.data,
-        wavs_dir=paths.wavs_dir,
-        spec_cache=runtime_config.spec_cache,
+    # MAS を強制アライメントの範囲へ絞るときは、音素ごとの範囲を一緒に読み、束ねるときに通れる範囲の行列を作る
+    train_dataset = (
+        TextAudioSpeakerLoaderWithMASSpans(
+            hps.data.training_files,
+            hps.data,
+            wavs_dir=paths.wavs_dir,
+            spec_cache=runtime_config.spec_cache,
+        )
+        if args.mas_span_tolerance >= 0
+        else TextAudioSpeakerLoader(
+            hps.data.training_files,
+            hps.data,
+            wavs_dir=paths.wavs_dir,
+            spec_cache=runtime_config.spec_cache,
+        )
     )
-    collate_fn = TextAudioSpeakerCollate(use_jp_extra=True)
+    collate_fn = (
+        CollateWithMASSpans(
+            TextAudioSpeakerCollate(use_jp_extra=True), args.mas_span_tolerance
+        )
+        if args.mas_span_tolerance >= 0
+        else TextAudioSpeakerCollate(use_jp_extra=True)
+    )
     if not args.not_use_custom_batch_sampler:
         # バケット境界（スペクトログラムのフレーム数単位）
         # 44100Hz / hop_length=512 の場合: 1 frame ≈ 0.0116 秒
@@ -909,19 +1007,22 @@ def train_and_evaluate(
     # 勾配累積用の変数
     is_accumulating = gradient_accumulation_steps > 1
 
-    for batch_idx, (
-        x,
-        x_lengths,
-        spec,
-        spec_lengths,
-        y,
-        y_lengths,
-        speakers,
-        tone,
-        language,
-        bert,
-        style_vec,
-    ) in enumerate(train_loader):
+    for batch_idx, batch in enumerate(train_loader):
+        (
+            x,
+            x_lengths,
+            spec,
+            spec_lengths,
+            y,
+            y_lengths,
+            speakers,
+            tone,
+            language,
+            bert,
+            style_vec,
+        ) = batch[:11]
+        # MAS を強制アライメントの範囲へ絞るときだけ、束ねた末尾に通れる範囲の行列が付く
+        mas_allowed = batch[11] if len(batch) > 11 else None
         # エポックの途中から再開したときは、中断前に学習済みの先頭のバッチを飛ばす (毎エポック同じ順に並ぶので、飛ばせば中断前と同じ順で続く)
         if batch_idx < resume_skip_batches:
             continue
@@ -948,6 +1049,8 @@ def train_and_evaluate(
         language = language.cuda(local_rank, non_blocking=True)
         bert = bert.cuda(local_rank, non_blocking=True)
         style_vec = style_vec.cuda(local_rank, non_blocking=True)
+        if mas_allowed is not None:
+            mas_allowed = mas_allowed.cuda(local_rank, non_blocking=True)
 
         with autocast(
             device_type="cuda",
@@ -974,6 +1077,7 @@ def train_and_evaluate(
                 language,
                 bert,
                 style_vec,
+                mas_allowed=mas_allowed,
             )
             mel = spec_to_mel_torch(
                 spec,
