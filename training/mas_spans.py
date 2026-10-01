@@ -96,7 +96,7 @@ class MASSpanWriter:
             phones (list[str]): 発話の SBV2 の音素列 (前後の無音を含む)
 
         Returns:
-            NDArray[np.float64] | None: [音素数, 2] のフレーム範囲。アライメントに失敗した場合は None
+            NDArray[np.float64] | None: [音素数, 2] のフレーム範囲 (アライメントに失敗した場合は None)
         """
 
         # 句読点と前後の無音は pau にし、続いた pau と促音は1つにまとめる (pydomino は同じ音素の連続を扱えない)
