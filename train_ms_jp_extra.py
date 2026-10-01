@@ -89,6 +89,7 @@ from training.losses import (
     generator_loss,
     kl_loss,
 )
+from training.mas_spans import MASSpanWriter
 from training.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 from training.runtime import (
     EMAModel,
@@ -239,7 +240,7 @@ def run():
         "--mas_span_tolerance",
         type=int,
         default=-1,
-        help="Restrict MAS to the forced-alignment span of each phone (<audio>.domino_spans.pt) widened by this many frames. Disabled when negative.",
+        help="Restrict MAS to the forced-alignment span of each phone widened by this many frames. The spans are computed with pydomino on the first run and saved as <audio>.domino_spans.pt. Disabled when negative.",
     )
     parser.add_argument(
         "--no_progress_bar",
@@ -386,6 +387,12 @@ def run():
             runtime_config.out_dir,
             config_path=str(paths.config_path),
             config_output_path=os.path.join(runtime_config.out_dir, "config.json"),
+        )
+
+    # MAS を強制アライメントの範囲へ絞るときは、範囲のファイルがまだ無い発話について先に作っておく (再開時は作成済みの発話を飛ばす)
+    if args.mas_span_tolerance >= 0 and rank == 0:
+        MASSpanWriter(hps.data.sampling_rate / hps.data.hop_length).write_lists(
+            [hps.data.training_files, hps.data.validation_files], paths.wavs_dir
         )
 
     torch.manual_seed(hps.train.seed)
