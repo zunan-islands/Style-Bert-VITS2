@@ -151,6 +151,19 @@ __DATE_PATTERN = re.compile(
 )
 __YEAR_MONTH_PATTERN = re.compile(r"(?<!\d)(18|19|20|21|22)(\d{2})/([0-1]?\d)(?!\d)")
 __FRACTION_PATTERN = re.compile(r"(\d+)[/／](\d+)")
+# 「Ⅱ」「ⅩⅬ」「Ⅱ‐四十二」のローマ数字と区切りを、変換と区間情報の抽出で共用
+__ROMAN_NUMERAL_PATTERN = re.compile(
+    r"([Ⅰ-ⅫⅬⅭⅮⅯⅰ-ⅻⅼⅽⅾⅿ]+)(?:[-‐‑‒–—−ー](?=[0-9零〇一二三四五六七八九十百千万億兆]))?"
+)
+__ROMAN_NUMERAL_VALUES = {
+    "I": 1,
+    "V": 5,
+    "X": 10,
+    "L": 50,
+    "C": 100,
+    "D": 500,
+    "M": 1000,
+}
 __ZERO_HOUR_PATTERN = re.compile(r"(?<![0-9])(午前|午後)?0時(?![0-9分]|間)")
 __TIME_PATTERN = re.compile(r"(\d+)時(\d+)分(?:(\d+)秒)?")
 # コロン区切りの時刻・タイムスタンプ・アスペクト比を検出する
@@ -1196,6 +1209,32 @@ def normalize_text(
     # 半角数字に変換されてしまう）
     text = __normalize_kanji_and_separators(text)
 
+    # 漢数字の数列表記処理後、NFKC の前に「Ⅱ」を「二」、「Ⅷ」を「八」へ変換
+    ## 図番号などの「Ⅱ‐四十二」は、項目間の区切りも「の」と読む
+    def convert_roman_numeral(match: re.Match[str]) -> str:
+        # 「ⅰC」「Core ⅰ7-12700K」「SH九百一ⅰC」のⅰは保持し、後段の NFKC で英字の i へ変換
+        if match.group(1).islower() is True and (
+            re.search(r"[A-Za-z0-9]$", text[: match.start()]) is not None
+            or re.match(r"[A-Za-z0-9]", text[match.start() + len(match.group(1)) :])
+            is not None
+        ):
+            return match.group()
+        # 「ⅩⅪ」「ⅩⅫ」は「XXI」「XXII」へ展開し、単文字の値から21と22を計算
+        values = [
+            __ROMAN_NUMERAL_VALUES[character]
+            for character in unicodedata.normalize("NFKC", match.group(1)).upper()
+        ]
+        # 「ⅩⅠⅠⅠ」は13、「ⅩⅬ」は小さい数を引いて40と計算し、一つの漢数字へ変換
+        total = sum(
+            -value if index + 1 < len(values) and value < values[index + 1] else value
+            for index, value in enumerate(values)
+        )
+        return str(num2words(total, lang="ja")) + (
+            "の" if len(match.group()) > len(match.group(1)) else ""
+        )
+
+    text = __ROMAN_NUMERAL_PATTERN.sub(convert_roman_numeral, text)
+
     # Unicode 正規化前に記号を変換
     # 正規化前でないと ℃ などが unicodedata.normalize() で分割されてしまう
     res = __replace_symbols(text)
@@ -1217,7 +1256,7 @@ def normalize_text(
     ## NFKC 正規化後に実行することで、NFKC で統一しきれない旧字体も新字体に置換できる
     res = res.translate(__ITAIJI_TRANSLATE_TABLE)
 
-    # 二の字点は pyopenjtalk が読みに展開しないため、直前の漢字を複製して表層欠けを避ける
+    # 二の字点は pyopenjtalk が読みに展開しないため、「代〻」を「代代」のように直前の漢字の繰り返しへ変換
     ## 先頭や漢字以外の直後にある 〻 は読みを確定できないので、後続のクリーンアップで削除する
     if "\u303b" in res:
         expanded_characters: list[str] = []
@@ -1361,12 +1400,26 @@ def __collect_normalization_details(
         (__EXPONENT_PATTERN, "number", 35),
         (__IRODORI_DECIMAL_PATTERN, "number", 36),
         (__KANJI_ZERO_DIGIT_SEQUENCE_PATTERN, "number", 37),
+        (__ROMAN_NUMERAL_PATTERN, "number", 38),
     ]
     for pattern, category, priority in pattern_candidates:
         candidates.extend(
             (match.start(), match.end(), category, priority)
             for match in pattern.finditer(search_text)
         )
+
+    # 「Ⅱ‐四十二」「Ⅱ‐1.1」「Ⅱ‐1〜3」「Ⅱ‐1/128」は後続の数値まで含めて再変換し、区切りの「の」も区間情報へ記録
+    for match in __ROMAN_NUMERAL_PATTERN.finditer(search_text):
+        if len(match.group()) > len(match.group(1)):
+            number = re.match(
+                r"[0-9零〇一二三四五六七八九十百千万億兆]+(?:\.[0-9]+)?"
+                r"(?:[/／〜～~][0-9零〇一二三四五六七八九十百千万億兆]+(?:\.[0-9]+)?)?",
+                search_text[match.end() :],
+            )
+            if number is not None:
+                candidates.append(
+                    (match.start(), match.end() + number.end(), "number", 38)
+                )
 
     # 数値と百分率記号は一つの発話内容になるため、数値部分を分割しない
     candidates.extend(

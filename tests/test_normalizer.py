@@ -673,6 +673,128 @@ def test_normalize_text_for_irodori_natural_prose_integration():
     )
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Ⅱ", "二"),
+        ("Ⅲ", "三"),
+        ("Ⅵ", "六"),
+        ("Ⅷ", "八"),
+        ("Ⅻ", "十二"),
+        ("ⅲ", "三"),
+        ("ⅰＣ", "iC"),
+        ("ＳＨ九百一ⅰＣ", "シュ九百一iC"),
+        ("Core ⅰ7-12700K", "コアi7-12700K"),
+        ("Core ⅰ７-12700K", "コアi7-12700K"),
+        ("Ｃｏｒｅ　ⅰ７－１２７００Ｋ", "コア,i7-12700K"),
+        ("Core ｉ７-12700K", "コアi7-12700K"),
+        ("ⅰ7", "アイセブン"),
+        ("ⅱ5", "イーアイファイブ"),
+        ("ⅲ5", "アイファイブ"),
+        ("ⅻ12", "シー12"),
+        ("ⅰ７", "アイセブン"),
+        ("ⅡG", "二G"),
+        ("Ⅲ5", "三5"),
+        ("Ⅱ7", "二7"),
+        ("Ⅼ", "五十"),
+        ("Ⅰ〜Ⅻ", "一ー十二"),
+        ("ⅩⅤⅠⅠ", "十七"),
+        ("ⅩⅠⅠⅠ", "十三"),
+        ("ⅩⅬ", "四十"),
+        ("ⅩⅪ章", "二十一章"),
+        ("ⅩⅫ章", "二十二章"),
+        ("ⅩⅪ", "二十一"),
+        ("ⅹⅺ章", "二十一章"),
+        ("ⅹⅻ章", "二十二章"),
+        ("図ⅩⅫ‐四十二", "図二十二の四十二"),
+        ("図Ⅱ‐四十二", "図二の四十二"),
+        ("図Ⅵ‐二十四", "図六の二十四"),
+        ("Ⅲ‐三", "三の三"),
+        ("Ⅰ〜Ⅲ", "一ー三"),
+        ("Ⅱ　計画の推進方策", "二,計画の推進方策"),
+        ("II", "II"),
+        ("VIII", "VIII"),
+    ],
+)
+def test_normalize_text_roman_numerals(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「Ⅱ」は「二」、「ⅩⅬ」は「四十」、型番の「ⅰC」は「iC」へ変換し、英字の「VIII」は保持
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(".", "。").replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "fragment", "reading"),
+    [
+        ("Ⅱ章", "Ⅱ", "二"),
+        ("図Ⅱ‐四十二", "Ⅱ‐四十二", "二の四十二"),
+        ("ⅩⅬ章", "ⅩⅬ", "四十"),
+        ("ⅩⅪ章", "ⅩⅪ", "二十一"),
+        ("ⅩⅫ章", "ⅩⅫ", "二十二"),
+    ],
+)
+def test_normalize_text_roman_numeral_details(
+    text: str, fragment: str, reading: str, for_irodori: bool
+) -> None:
+    """
+    「Ⅱ章」「図Ⅱ‐四十二」のローマ数字と区切りの読みを元区間つきで記録
+    """
+
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    assert [
+        (d.original_text, d.normalized_text, d.category) for d in result.details
+    ] == [(fragment, reading, "number")]
+    for detail in result.details:
+        assert text[detail.original_start : detail.original_end] == fragment
+        assert result.text[detail.normalized_start : detail.normalized_end] == reading
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "fragment", "expected", "irodori_expected"),
+    [
+        ("図Ⅱ‐1.1", "Ⅱ‐1.1", "二の1.1", "二の一点一"),
+        ("図Ⅱ‐0.5", "Ⅱ‐0.5", "二の0.5", "二の零点五"),
+        ("図Ⅱ‐１．１", "Ⅱ‐１．１", "二の1.1", "二の一点一"),
+        ("図ⅰ‐1.1", "ⅰ‐1.1", "一の1.1", "一の一点一"),
+        ("（図Ⅱ‐1.1）", "Ⅱ‐1.1", "二の1.1", "二の一点一"),
+        ("図Ⅱ‐1〜3", "Ⅱ‐1〜3", "二の1から3", "二の1から3"),
+        ("図Ⅱ‐１～３", "Ⅱ‐１～３", "二の1から3", "二の1から3"),
+        ("図Ⅱ‐1~3", "Ⅱ‐1~3", "二の1から3", "二の1から3"),
+        ("図Ⅱ‐1/128", "Ⅱ‐1/128", "二の百二十八ぶんの一", "二の百二十八ぶんの一"),
+        (
+            "図Ⅱ‐１／１２８",
+            "Ⅱ‐１／１２８",
+            "二の百二十八ぶんの一",
+            "二の百二十八ぶんの一",
+        ),
+        ("図Ⅱ‐1/2", "Ⅱ‐1/2", "二の1月2日", "二の1月2日"),
+    ],
+)
+def test_normalize_text_roman_numeral_following_number_details(
+    text: str, fragment: str, expected: str, irodori_expected: str, for_irodori: bool
+) -> None:
+    """
+    「図Ⅱ‐1.1」「図Ⅱ‐1〜3」「図Ⅱ‐1/128」のローマ数字と後続の数値をまとめて区間情報へ記録
+    """
+
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    reading = irodori_expected if for_irodori is True else expected
+    assert [
+        (d.original_text, d.normalized_text, d.category) for d in result.details
+    ] == [(fragment, reading, "number")]
+    detail = result.details[0]
+    assert detail.original_start == text.index(fragment)
+    assert detail.original_end == text.index(fragment) + len(fragment)
+    assert result.text[detail.normalized_start : detail.normalized_end] == reading
+    assert detail.normalized_start == result.text.index(reading)
 
 
 def test_normalize_text_zero_variant_characters():
