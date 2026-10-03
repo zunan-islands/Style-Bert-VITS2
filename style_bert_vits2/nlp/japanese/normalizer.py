@@ -2838,6 +2838,16 @@ def __convert_english_to_katakana(text: str) -> str:
             # まず base_word をカタカナに変換できるか確認
             base_katakana = KATAKANA_MAP.get(base_word.lower())
             if base_katakana:
+                # 「COP6」は辞書に登録された大文字の COP を優先して読み、「NO1」の NO は「ナンバー」へ変換
+                # 酸素摂取量の「Vo2」「Vo2.」は大文字の VO を参照し、音楽クレジットの「Vo」(ボーカル) と読み分ける
+                base_katakana = (
+                    "ナンバー"
+                    if base_word == "NO"
+                    else KATAKANA_MAP.get(
+                        "VO" if base_word == "Vo" and number == "2" else base_word,
+                        base_katakana,
+                    )
+                )
                 # 数字を英語表現に変換し、それをカタカナに変換
                 number_in_english = num2words(int(number), lang="en")
                 number_katakana = process_english_word(

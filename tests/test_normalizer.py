@@ -4057,6 +4057,8 @@ def test_normalize_text_english():
         ("ＭＣ", "エムシー"),
         ("ＦＡ", "エフエー"),
         ("ＴＯＫＩＯライブ", "トキオライブ"),
+        ("ＣＯＰ６", "シーオーピーシックス"),
+        ("ＣＯＰ３", "シーオーピースリー"),
         ("cop", "コップ"),
         ("fa", "ファ"),
         ("mc", "マック"),
@@ -4067,10 +4069,17 @@ def test_normalize_text_english():
         ("Ｖｏ．の２人", "ボーカル.の2人"),
         ("Vo", "ボーカル"),
         ("VO", "ブイオー"),
+        ("Vo2", "ブイオーツー"),
+        ("Vo2.", "ブイオーツー"),
+        ("Vo2。", "ブイオーツー."),
+        ("Ｖｏ２", "ブイオーツー"),
+        ("VO2", "ブイオーツー"),
+        ("OM-4", "オーエムフォー"),
         ("ＮＩＥ講習会", "エヌアイイー講習会"),
         ("ＭＴ車", "エムティー車"),
         ("ＴＯＶ", "ティーオーブイ"),
         ("ＮｅｗＳ", "ニュース"),
+        ("ＮＯ１", "ナンバーワン"),
         ("RADEON", "ラデオン"),
         ("page", "ページ"),
         ("GPT-4.5", "ジーピーティー4.5"),
@@ -4080,9 +4089,9 @@ def test_normalize_text_uppercase_abbreviations(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    「OL」は「オーエル」、「TOKIO」は「トキオ」へ変換
+    「COP6」は「シーオーピーシックス」、「OL」は「オーエル」、「TOKIO」は「トキオ」へ変換
     小文字の「cop」は「コップ」、「iPhone11」は「アイフォンイレブン」と読む
-    音楽クレジットの「Vo」は「ボーカル」と読む
+    音楽クレジットの「Vo」は「ボーカル」、酸素摂取量の「Vo2」は「ブイオーツー」と読む
     """
 
     if for_irodori is True and text == "GPT-4.5":
@@ -4090,6 +4099,8 @@ def test_normalize_text_uppercase_abbreviations(
     # 「Ｖｏ．の２人」の全角ピリオドは Irodori 向けでは「。」へ変換
     if for_irodori is True and text == "Ｖｏ．の２人":
         expected = "ボーカル。の2人"
+    if for_irodori is True and text == "Vo2。":
+        expected = "ブイオーツー。"
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
