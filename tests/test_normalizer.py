@@ -3745,6 +3745,51 @@ def test_normalize_text_english():
     )
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ＯＬのとき", "オーエルのとき"),
+        ("ＮＥＷＳのメンバー", "ニュースのメンバー"),
+        ("ＭＣ", "エムシー"),
+        ("ＦＡ", "エフエー"),
+        ("ＴＯＫＩＯライブ", "トキオライブ"),
+        ("cop", "コップ"),
+        ("fa", "ファ"),
+        ("mc", "マック"),
+        ("ol", "オル"),
+        ("news", "ニューズ"),
+        ("tokio", "トーキョー"),
+        ("iPhone11", "アイフォンイレブン"),
+        ("Ｖｏ．の２人", "ボーカル.の2人"),
+        ("Vo", "ボーカル"),
+        ("VO", "ブイオー"),
+        ("ＮＩＥ講習会", "エヌアイイー講習会"),
+        ("ＭＴ車", "エムティー車"),
+        ("ＴＯＶ", "ティーオーブイ"),
+        ("ＮｅｗＳ", "ニュース"),
+        ("RADEON", "ラデオン"),
+        ("page", "ページ"),
+        ("GPT-4.5", "ジーピーティー4.5"),
+    ],
+)
+def test_normalize_text_uppercase_abbreviations(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「OL」は「オーエル」、「TOKIO」は「トキオ」へ変換
+    小文字の「cop」は「コップ」、「iPhone11」は「アイフォンイレブン」と読む
+    音楽クレジットの「Vo」は「ボーカル」と読む
+    """
+
+    if for_irodori is True and text == "GPT-4.5":
+        expected = "ジーピーティー四点五"
+    # 「Ｖｏ．の２人」の全角ピリオドは Irodori 向けでは「。」へ変換
+    if for_irodori is True and text == "Ｖｏ．の２人":
+        expected = "ボーカル。の2人"
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 def test_normalize_text_mixed_scripts():
     """文字種混在のテスト"""
     # 漢字・ひらがな・カタカナの混在
