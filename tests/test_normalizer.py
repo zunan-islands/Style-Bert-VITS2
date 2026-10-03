@@ -68,6 +68,30 @@ def test_normalize_text_return_details_tracks_spoken_replacements():
         )
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "fragment", "start", "end"),
+    [
+        ("text　1kg", "1キログラム", 4, 10),
+        ("text　100%", "100パーセント", 4, 12),
+        ("テキスト1キログラム、text　1kg", "1キログラム", 15, 21),
+    ],
+)
+def test_normalize_text_english_space_detail_positions(
+    text: str, fragment: str, start: int, end: int, for_irodori: bool
+) -> None:
+    """「text　1kg」の空白変換で位置がずれても、「1kg」の出力位置を記録"""
+
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    assert len(result.details) == 1
+    detail = result.details[0]
+    assert (detail.normalized_text, detail.normalized_start, detail.normalized_end) == (
+        fragment,
+        start,
+        end,
+    )
+    assert result.text[start:end] == fragment
+    assert text[detail.original_start : detail.original_end] == detail.original_text
 
 
 def test_normalize_text_return_details_keeps_decorative_percent_symbols():
@@ -460,6 +484,119 @@ def test_normalize_text_fullwidth_spaces_between_japanese_phrases(
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Ｍａｃ　ＯＳ　Ｘ", "マックオーエスX"),
+        ("Ｍａｃ　OS　Ｘ", "マックオーエスX"),
+        ("Mac　ＯＳ　X", "マックオーエスX"),
+        ("Mac　OS　X", "マック,オーエス,X"),
+        ("Mac OS X", "マックオーエスX"),
+        ("ｔｅｘｔ　ｔｅｘｔ", "テキストテキスト"),
+        ("text　text", "テキスト,テキスト"),
+        ("ｈｙｄｒｏｘｙｌ　ｒａｄｉｃａｌ", "ハイドゥロキシールラディカル"),
+        ("五十ｃｍ　", "五十cm,"),
+        ("五百八十ｇ　", "五百八十g,"),
+        ("［ｄｉｒｅｃｔ　、］", "'ダイレクト,'"),
+        ("太郎　ＶＳ　次郎", "太郎,バーサス,次郎"),
+        ("ＮＢＡ　８日", "エヌビーエー,8日"),
+        ("ｕｎｉｔ　３", "ユニット3"),
+        ("section　4", "セクション4"),
+        ("Ｌｅｓｓｏｎ　８", "レッスン8"),
+        ("ＴＯＰＩＣＳ　５", "トピックス5"),
+        ("ｆａｌｌｏｕｔ　３", "フォールアウト3"),
+        ("unit 3", "ユニットスリー"),
+        (
+            "ＸＰ　Ｐｒｏｆｅｓｓｉｏｎａｌ　Ｓｅｒｖｉｃｅ　Ｐａｃｋ　１",
+            "エックスピープロフェッショナルサービスパック1",
+        ),
+        ("ＧｅＦｏｒｃｅ　ＦＸ", "ジーフォースエフエックス"),
+    ],
+)
+def test_normalize_text_spaces_inside_english_and_after_units(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「Ｍａｃ　ＯＳ　Ｘ」と「Mac OS X」は英単語を続けて読み、「Mac　OS　X」は読点へ変換
+    「ｔｅｘｔ　ｔｅｘｔ」は続けて読み、「text　text」と「五十cm　」の全角空白は読点へ変換
+    「Ｍａｃ　OS　Ｘ」「Mac　ＯＳ　X」の全角英字と半角英字の間も続けて読む
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    if for_irodori is True and text == "［ｄｉｒｅｃｔ　、］":
+        expected = "「ダイレクト、」"
+    elif for_irodori is True and text == "ＮＢＡ　８日":
+        expected = "エヌビーエー、8日"
+    elif for_irodori is True and text == "太郎　ＶＳ　次郎":
+        expected = "太郎、バーサス、次郎"
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "irodori_expected"),
+    [
+        (
+            "七十ｃｍ　０．６ｃｍ幅平ゴム",
+            "七十cm0.6センチメートル幅平ゴム",
+            "七十cm零点六センチメートル幅平ゴム",
+        ),
+        (
+            "60cm 0.7cmコード",
+            "60センチメートル0.7センチメートルコード",
+            "60センチメートル零点七センチメートルコード",
+        ),
+        ("2kg　0.7kg", "2キログラム0.7キログラム", "2キログラム零点七キログラム"),
+        (
+            "5mm 0.6mm",
+            "5ミリメートル0.6ミリメートル",
+            "5ミリメートル零点六ミリメートル",
+        ),
+    ],
+)
+def test_normalize_text_spaced_quantities(
+    text: str, expected: str, irodori_expected: str, for_irodori: bool
+) -> None:
+    """
+    「七十cm　0.6cm」の単位間の空白を除去して、小数点を保持
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        irodori_expected if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "irodori_expected"),
+    [
+        ("1/2 個人面談を実施", "1月2日個人面談を実施", "1月2日個人面談を実施"),
+        ("5kg−1.5kg", "5キログラム1.5キログラム", "5キログラム一点五キログラム"),
+        (
+            "○九〇一二三四五六七八",
+            "ゼロキューゼロ,イチニーサンヨン,ゴーロクナナハチ",
+            "ゼロキューゼロ、イチニーサンヨン、ゴーロクナナハチ",
+        ),
+        (
+            "○さんに連絡してください",
+            "マルさんに連絡してください",
+            "マルさんに連絡してください",
+        ),
+    ],
+)
+def test_normalize_text_quantity_and_circle_contexts(
+    text: str, expected: str, irodori_expected: str, for_irodori: bool
+) -> None:
+    """
+    「1/2 個人面談」は日付、「5kg−1.5kg」は2つの数量として変換
+    「○九〇一二三四五六七八」は電話番号、「○さん」の○は「マル」として読む
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        irodori_expected if for_irodori is True else expected
+    )
 
 
 def test_normalize_text_for_irodori_retains_pause_apostrophe():

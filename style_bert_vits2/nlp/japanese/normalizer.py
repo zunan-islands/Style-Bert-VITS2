@@ -1166,6 +1166,14 @@ def normalize_text(
 
     original_text = text
 
+    # 「Ｍａｃ　ＯＳ　Ｘ」「Ｍａｃ　OS」のように片側でも全角英字なら全角空白を半角化し、英単語を続けて読む
+    # 「Mac　OS　X」の半角英字同士の全角空白は保持し、後段で読点へ変換
+    text = re.sub(
+        r"(?<=[Ａ-Ｚａ-ｚ])\u3000+(?=[A-Za-zＡ-Ｚａ-ｚ])|(?<=[A-Za-z])\u3000+(?=[Ａ-Ｚａ-ｚ])",
+        " ",
+        text,
+    )
+
     # 最初にカタカナを除く英数字記号 (ASCII 文字) を半角に変換する
     # どのみち Unicode 正規化で行われる処理ではあるが、__replace_symbols() は Unicode 正規化前に実行しなければ正常に動作しない
     # 一方で __replace_symbols() は半角英数字の入力を前提に実装されており、全角英数記号が入ると変換処理（正規表現マッチ）が意図通り実行されない可能性がある
@@ -1174,6 +1182,14 @@ def normalize_text(
         text, kana=False, digit=True, ascii=True, ignore="\u3000"
     )  # 全角スペースは変換しない
 
+    # 「unit　3」の空白を一時的に U+2060 へ置換して3を日本語読みで保ち、「NBA　8日」は対象外
+    text = re.sub(
+        r"(?<=[A-Za-z])\u3000+(?![0-9]+(?:[年月日時分秒]|[-−][0-9]))(?=[0-9])",
+        "\u2060",
+        text,
+    )
+    # 「[direct　、]」のような括弧内の英語と区切り記号の間の全角空白を半角化
+    text = re.sub(r"([\[(][^\[\]()\n]*[A-Za-z])\u3000+(?=[、,;；.\]])", r"\1 ", text)
     # 漢数字の数列表記・ゼロ表記揺れ・数字間のカタカナ長音記号「ー」を正規化する
     # __replace_symbols() より前に実行する必要がある（さもなければ __replace_symbols() 内の
     # 指数変換 (num2words) が生成した漢数字（零点零零零零零一二三の「一二三」等）まで
@@ -1221,6 +1237,9 @@ def normalize_text(
         res = "".join(expanded_characters)
 
     res = __convert_english_to_katakana(res)  # 英単語をカタカナに変換
+
+    # 「unit　3」で保持した U+2060 を英単語変換後に半角空白へ戻し、「ユニット3」と読む
+    res = res.replace("\u2060", " ")
 
     res = __convert_numbers_to_words(res)  # 「100円」→「百円」等
 
@@ -1439,7 +1458,18 @@ def __collect_normalization_details(
             continue
         normalized_end = normalized_start + len(normalized_fragment)
         if normalized_text[normalized_start:normalized_end] != normalized_fragment:
-            continue
+            # 「text　1kg」は候補末尾までの正規化結果から、空白変換を反映した出力位置を求める
+            normalized_prefix = normalize_text(
+                original_text[:end], for_irodori=for_irodori
+            )
+            normalized_end = len(normalized_prefix)
+            normalized_start = normalized_end - len(normalized_fragment)
+            if (
+                normalized_start < 0
+                or normalized_text[normalized_start:normalized_end]
+                != normalized_fragment
+            ):
+                continue
 
         details.append(
             NormalizationDetail(
@@ -3222,8 +3252,14 @@ def __convert_english_to_katakana(text: str) -> str:
                 # 0-11の数字であり、かつその後に英数字が続かない場合
                 if num_str and 0 <= int(num_str) <= 11:
                     # 数字の後に英数字が続くかどうかを確認
+                    # 「60cm 0.7cm」の0の後に小数点が続く場合は、cm と0を結合せず小数点を保持
                     has_alnum_after = j < len(text) and (
                         __ENGLISH_WORD_PATTERN.match(text[j]) is not None
+                        or (
+                            text[j] == "."
+                            and j + 1 < len(text)
+                            and text[j + 1].isdigit() is True
+                        )
                     )
                     if not has_alnum_after:
                         # 英単語+スペース/ハイフン+数字を一つの単語として扱う
