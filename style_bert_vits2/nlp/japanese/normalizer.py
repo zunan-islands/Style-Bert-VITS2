@@ -1184,10 +1184,10 @@ def normalize_text(
     # 正規化前でないと ℃ などが unicodedata.normalize() で分割されてしまう
     res = __replace_symbols(text)
 
-    # 自然な日本語テキスト読み上げのために、全角スペースは句点に変換
+    # 「山田太郎　代表取締役」のような語句を区切る全角空白を読点へ変換
     # 半角スペースが入る箇所で止めて読むかはケースバイケースなため、変換は行わない
     # Unicode 正規化でスペースが全て半角に変換される前に実行する必要がある
-    res = res.replace("\u3000", "。")
+    res = res.replace("\u3000", "、")
 
     # ゼロ幅スペースを削除
     res = res.replace("\u200b", "")

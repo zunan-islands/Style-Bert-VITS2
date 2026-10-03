@@ -23,7 +23,9 @@ def test_normalize_text_basic():
     assert normalize_text("なに？どうして？") == "なに?どうして?"
     # 特殊な空白文字
     assert normalize_text("text\u200btext") == "テキストテキスト"  # ゼロ幅スペース
-    assert normalize_text("text\u3000text") == "テキスト.テキスト"  # 全角スペース
+    assert (
+        normalize_text("text\u3000text") == "テキスト,テキスト"
+    )  # 英単語同士の「text　text」の全角空白を読点へ変換
     assert normalize_text("text\ttext") == "テキストテキスト"  # タブ
     # 制御文字
     assert normalize_text("text\ntext") == "テキスト.テキスト"  # 改行
@@ -64,6 +66,8 @@ def test_normalize_text_return_details_tracks_spoken_replacements():
             result.text[detail.normalized_start : detail.normalized_end]
             == detail.normalized_text
         )
+
+
 
 
 def test_normalize_text_return_details_keeps_decorative_percent_symbols():
@@ -415,11 +419,47 @@ def test_normalize_text_for_irodori_differs_from_sbv2_on_punctuation(
 
 
 def test_normalize_text_for_irodori_whitespace_and_newlines():
-    """空白・改行を自然な日本語の句点へ変換する"""
+    """
+    「text　text」の全角空白を読点へ変換し、「上段」と「下段」の間の改行は句点へ変換
+    """
 
-    assert normalize_text("text\u3000text", for_irodori=True) == "テキスト。テキスト"
+    assert normalize_text("text\u3000text", for_irodori=True) == "テキスト、テキスト"
     assert normalize_text("text\ntext", for_irodori=True) == "テキスト。テキスト"
     assert normalize_text("上段\n下段", for_irodori=True) == "上段。下段"
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("重要なお知らせ　明日は休業です", "重要なお知らせ,明日は休業です"),
+        ("山田太郎　代表取締役", "山田太郎,代表取締役"),
+        ("東京大学　教授　山田太郎", "東京大学,教授,山田太郎"),
+        ("長さ五十ｃｍ　幅は十ｃｍ", "長さ五十cm,幅は十cm"),
+        ("表計算　［ＥＸＣＥＬ］", "表計算,'エクセル'"),
+        ("日本語 English 日本語", "日本語イングリッシュ日本語"),
+        ("問　03-1234-5678", "問,ゼロサン,イチニーサンヨン,ゴーロクナナハチ"),
+        ("質問　03-1234-5678", "質問,ゼロサン,イチニーサンヨン,ゴーロクナナハチ"),
+        ("問　03", "問,03"),
+        ("上段\n下段", "上段.下段"),
+    ],
+)
+def test_normalize_text_fullwidth_spaces_between_japanese_phrases(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「山田太郎　代表取締役」の全角空白を読点にし、「上段」と「下段」の間の改行は句点にする
+    「日本語 English 日本語」の半角空白は、単語の変換後に除去
+    「問　03-1234-5678」の全角空白は読点へ変換し、「問」の表記は保持
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、").replace(".", "。")
+        if text == "表計算　［ＥＸＣＥＬ］":
+            expected = "表計算、「エクセル」"
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 
 
 def test_normalize_text_for_irodori_retains_pause_apostrophe():
@@ -485,7 +525,7 @@ def test_normalize_text_for_irodori_natural_prose_integration():
             "彼は「本当に!?\u3000そうなの?」と聞いた。",
             for_irodori=True,
         )
-        == "彼は「本当に！？。そうなの？」と聞いた。"
+        == "彼は「本当に！？、そうなの？」と聞いた。"
     )
     assert (
         normalize_text(
@@ -494,6 +534,8 @@ def test_normalize_text_for_irodori_natural_prose_integration():
         )
         == "「重要」今日の予定（仮）を確認、お願いします…"
     )
+
+
 
 
 def test_normalize_text_zero_variant_characters():
@@ -1238,6 +1280,8 @@ def test_normalize_text_dates():
     assert normalize_text("西暦2024年1月1日") == "西暦2024年1月1日"
     assert normalize_text("AD2024") == "エーディー2024"
     assert normalize_text("BC356") == "ビーシー356"
+
+
 
 
 def test_normalize_text_time():
