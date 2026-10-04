@@ -1149,6 +1149,43 @@ def test_normalize_text_kanji_numeral_sequence_with_zero() -> None:
     assert normalize_text("〇〇パン", for_irodori=True) == "マルマルパン"
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 漢数字に挟まれた全角の「．」は小数点として「点」に書き換える
+        ("五十九．二％", "五十九点二パーセント"),
+        ("体温は三十六．五度", "体温は三十六点五度"),
+        ("十．五円", "十点五円"),
+        ("九十一．四メートル", "九十一点四メートル"),
+        ("九百九十一．七三五五", "九百九十一点七三五五"),
+        # 小数部の「〇」は伏せ字の「マル」ではなく、数の「零」として書く
+        ("三十九．〇％", "三十九点零パーセント"),
+        ("〇．七五％", "零点七五パーセント"),
+        # 点が2つ以上続く日付や節番号、小数部に「十」を含む月日は小数として扱わない
+        ("平成十三．四．六", "平成十三.四.六"),
+        ("三．二十一", "三.二十一"),
+        # 項目番号の後の「．」は小数点ではない
+        ("十二．曲名", "十二.曲名"),
+        # 元号に続く「平成十三．四月」「令和六．五」は和暦の年月なので小数点にしない
+        ("平成十三．四月", "平成十三.四月"),
+        ("令和六．五", "令和六.五"),
+    ],
+)
+def test_normalize_text_kanji_decimal_point(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「五十九．二％」のように漢数字に挟まれた全角の「．」が句点として扱われて「テン」が消えないよう、
+    「五十九点二」と小数点を書き換えることを確認する。
+    「平成十三．四．六」のような日付や「十二．曲名」のような項目番号の「．」は小数点にしない。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(".", "。")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 def test_normalize_text_circle_to_maru() -> None:
     """
     数値コンテキスト外の丸系文字（〇, ○, ◯, ⭕, ⚪ 等）が「マル」として読まれることを検証する。
@@ -1539,8 +1576,6 @@ def test_normalize_text_dates():
     assert normalize_text("西暦2024年1月1日") == "西暦2024年1月1日"
     assert normalize_text("AD2024") == "エーディー2024"
     assert normalize_text("BC356") == "ビーシー356"
-
-
 
 
 def test_normalize_text_time():
