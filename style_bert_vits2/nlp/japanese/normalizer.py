@@ -139,6 +139,12 @@ __NUMERAL_RANGE_PATTERN = re.compile(
     r"(?:[^\s0-9零〇一二三四五六七八九十百千万億兆〜~～、。,.!?！？「」『』()（）]{1,3})?)"
     r"\s*[〜~～]\s*(?=[0-9零〇一二三四五六七八九十百千万億兆])"
 )
+# 「A〜D」「a〜k」のように英字1文字どうしを波ダッシュでつないだ範囲を検出する
+## 「3A〜D」「A〜D4」のように英数字に接した英字は1文字の項ではないので除外する
+## 「P〜D〜C〜A」のように3つ以上つないだ並びは範囲ではないので、後ろに波ダッシュが続くものは除外し、前の波ダッシュは置換時に確かめる
+__LATIN_LETTER_RANGE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])([A-Za-z])\s*[〜~～]\s*([A-Za-z])(?![A-Za-z0-9])(?!\s*[〜~～])"
+)
 # U+2212 は明示的な減算記号なので、英数字変数の間ではハイフンや長音として扱わない
 __SYMBOLIC_MINUS_PATTERN = re.compile(
     r"(?<![A-Za-zΑ-Ωα-ω])([A-Za-zΑ-Ωα-ω])\s*−\s*"
@@ -1860,6 +1866,19 @@ def __replace_symbols(text: str) -> str:
     text = __MIXED_NUMBER_RANGE_PATTERN.sub(r"\1から", text)
     # 漢数字や左側に単位を伴う数どうしの範囲も、波ダッシュが後段で長音になる前に展開する
     text = __NUMERAL_RANGE_PATTERN.sub(r"\1から", text)
+    # 英字1文字どうしの範囲は、大文字と小文字が揃い、アルファベット順に進む場合だけ「から」でつなぐ
+    ## 「D〜A」のように逆順のものは手順や対応の並びの可能性があるので、従来どおり長音にする
+    ## 「A 〜 B 〜 C」の後半のように、空白を挟んで前に波ダッシュが続く並びも範囲にしない
+    text = __LATIN_LETTER_RANGE_PATTERN.sub(
+        lambda m: (
+            f"{m.group(1)}から{m.group(2)}"
+            if m.group(1).isupper() == m.group(2).isupper()
+            and m.group(1) < m.group(2)
+            and re.search(r"[〜~～]\s*$", m.string[: m.start()]) is None
+            else m.group(0)
+        ),
+        text,
+    )
 
     # 変数間の減算記号は最終文字フィルタで消える前に読みへ変換する
     text = __SYMBOLIC_MINUS_PATTERN.sub(r"\1マイナス\2", text)

@@ -1433,6 +1433,41 @@ def test_normalize_text_kanji_number_ranges(
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 英字1文字どうしの範囲は、「〜」を長音にせず「から」でつなぐ
+        ("Ａ〜Ｄをピーシングし", "AからDをピーシングし"),
+        ("ａ〜ｋをピーシング", "aからkをピーシング"),
+        ("A～Z", "AからZ"),
+        # 記号の付いた英字で終わる範囲も「から」でつなぐ
+        ("Ａ〜Ｂ′をピーシング", "AからBプライムをピーシング"),
+        # 順番が逆の英字や、「〜」で3つ以上つないだ英字は範囲ではなく手順の並びなので書き換えない
+        ("Ｐ〜Ｄ〜Ｃ〜Ａサイクル", "PーDーCーAサイクル"),
+        ("Ｄ〜Ａ", "DーA"),
+        # 2文字以上の英字やローマ数字の並びは、1文字の英字の範囲として扱わない
+        ("民法Ｉ〜ＩＩＩ", "民法IーIII"),
+        # 空白を挟んで3つ以上つないだ並びも、範囲ではないので書き換えない
+        ("A 〜 B 〜 C", "AーBーC"),
+        # 英字の前後に数字が接していれば1文字の英字ではないので、範囲として扱わない
+        ("A〜D4", "AーD4"),
+        ("3A〜D", "3アンペアーD"),
+        # 空白を挟んでも、独立した英字1文字どうしの範囲なら「から」でつなぐ
+        ("Ａ 〜 Ｄをピーシング", "AからDをピーシング"),
+    ],
+)
+def test_normalize_text_latin_letter_ranges(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「Ａ〜Ｄ」「ａ〜ｋ」のように英字1文字どうしを「〜」でつないだ範囲が、
+    「〜」の長音化で「エーーディー」のように前の音を伸ばして読まれず、「エーからディー」と読まれることを確認する。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
@@ -1451,7 +1486,6 @@ def test_normalize_text_kanji_number_ranges(
         ("毎週～毎日", "毎週ー毎日"),
         ("月～曜日", "月ー曜日"),
         ("東京～大阪", "東京ー大阪"),
-        ("A～Z", "AーZ"),
     ],
 )
 def test_normalize_text_wave_dash_not_converted_to_range(
