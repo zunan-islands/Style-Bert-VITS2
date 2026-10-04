@@ -227,6 +227,36 @@ def test_normalize_text_return_details_tracks_number_expressions():
             )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_details"),
+    [
+        # 前後の項で読み方が決まる等号と乗算記号も、全文と同じ読みで区間を記録する
+        ("x=3", [("symbol", "=", "イコール")]),
+        ("面積＝縦×横", [("symbol", "＝", "イコール"), ("symbol", "×", "かける")]),
+    ],
+)
+def test_normalize_text_return_details_tracks_context_dependent_replacements(
+    text: str, expected_details: list[tuple[str, str, str]]
+) -> None:
+    """
+    「小さじ1/2」の分数や「面積＝縦×横」の等号のように、前後の文字列で変換が決まる区間も、
+    区間だけを再変換した結果ではなく全文の変換結果に合わせて details に記録されることを確認する。
+    """
+
+    result = normalize_text(text, return_details=True)
+
+    assert [
+        (detail.category, detail.original_text, detail.normalized_text)
+        for detail in result.details
+    ] == expected_details
+    for detail in result.details:
+        assert text[detail.original_start : detail.original_end] == detail.original_text
+        assert (
+            result.text[detail.normalized_start : detail.normalized_end]
+            == detail.normalized_text
+        )
+
+
 def test_normalize_text_return_details_keeps_str_compatibility_for_irodori():
     """既存呼び出しと Irodori-TTS 向け出力は文字列のまま維持する"""
 
@@ -1445,6 +1475,79 @@ def test_normalize_text_mathematical():
     assert normalize_text("∟") == "直角"
     assert normalize_text("∡") == "測定角"
     assert normalize_text("∢") == "球面角"
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 数や変数に挟まれた等号は、数式として「イコール」と読む
+        ("ｘ＝３", "xイコール3"),
+        ("x = 3", "xイコール3"),
+        ("Ｎ＝十九", "Nイコール十九"),
+        ("３×三十＝九十時間", "3かける三十イコール九十時間"),
+        # 演算子を含む語の式も、数式として「イコール」と読む
+        ("面積＝縦×横", "面積イコール縦かける横"),
+        ("利回り＝利益÷株価", "利回りイコール利益わる株価"),
+        # 発信地と通信社、写真説明、人名と肩書きをつなぐ等号は読まず、読点で区切る
+        ("ロンドン＝共同", "ロンドン,共同"),
+        ("記念撮影する選手たち＝写真", "記念撮影する選手たち,写真"),
+        ("佐藤一郎さん＝東京都＝が受賞した", "佐藤一郎さん,東京都,が受賞した"),
+        # 外国人名の区切りの等号も、中黒と同じく読点で区切る
+        ("ジャン＝ポール", "ジャン,ポール"),
+        # 項目名と値、通貨の換算のような等号は、片側が数でも数式として読まない
+        ("観衆＝三万人", "観衆,三万人"),
+        ("１ドル＝百二十円台", "1ドル,百二十円台"),
+        # 語と語を同一視するだけの等号は、演算子がなければ数式として読まない
+        ("強気＝買いという判断", "強気,買いという判断"),
+        # 行頭の「＊」や区切りのダッシュは演算子ではないので、項目名と値の等号は読まない
+        ("＊別名＝七変化", "別名,七変化"),
+        # 根号も数式の項として「イコール」と読む
+        ("x=√2", "xイコールルート2"),
+        # 減算や語どうしの割り算も、記号を読みに変える前の式で判定して「イコール」と読む
+        ("差額＝x−y", "差額イコールxマイナスy"),
+        ("速度＝距離／時間", "速度イコール距離/時間"),
+        # 英数字や記号が絡んで数式と認識できない等号は、読点にせず「イコール」と読む
+        ("カトマンズ＝ＡＰ共同", "カトマンズイコールエーピー共同"),
+        ("１回−巨人＝３回まで", "1回-巨人イコール3回まで"),
+        # 「＝＝」のように続く等号も、両側が日本語の語なら読点で区切る
+        ("ジャワ原人＝＝が", "ジャワ原人,,が"),
+        # 日付の「/」は語の割り算ではないので、公演の日付と会場をつなぐ等号は読点で区切る
+        ("十二／二十八＝北九州芸術劇場", "十二/二十八,北九州芸術劇場"),
+    ],
+)
+def test_normalize_text_equals_sign(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「ｘ＝３」「面積＝縦×横」のように数や変数、演算子の式に挟まれた等号は「イコール」と読み、
+    「ロンドン＝共同」「選手たち＝写真」のように新聞で語をつなぐ等号は読まずに読点で区切ることを確認する。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 括弧と関数呼び出しも数式の項として「イコール」と読む
+        ("f(x)=x", "f'x'イコールx", "f（x）イコールx"),
+        ("x=(3)", "xイコール'3'", "xイコール（3）"),
+        ("x = (a + b)", "xイコール'aプラスb'", "xイコール（aプラスb）"),
+    ],
+)
+def test_normalize_text_equals_sign_with_brackets(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「f(x)=x」「x=(3)」のように括弧でくくった項や関数呼び出しに挟まれた等号も、
+    語をつなぐ等号として読点にせず、数式の「イコール」と読むことを確認する。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
 
 
 def test_normalize_text_dates():

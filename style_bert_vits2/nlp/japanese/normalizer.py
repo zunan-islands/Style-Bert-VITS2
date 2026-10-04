@@ -140,6 +140,24 @@ __SYMBOLIC_MINUS_PATTERN = re.compile(
 __NUMBER_MATH_PATTERN = re.compile(
     r"(\d+)\s*([+＋➕\-−－ー➖×✖⨯÷➗*＊])\s*(\d+)\s*=\s*(\d+)"
 )
+# 等号と前後の空白を検出し、数式の等号か語をつなぐ等号かを前後の文字列で判定する
+__EQUALS_PATTERN = re.compile(r"\s*=\s*")
+# 等号の左の数式の項 (数字、1文字の変数、漢字の語に続かない漢数字、閉じ括弧) を検出する
+__MATH_LEFT_TERM_PATTERN = re.compile(
+    r"(?:(?<![A-Za-z])[A-Za-zΑ-Ωα-ω][0-9]*|[0-9]|(?<![一-龯々])[零一二三四五六七八九十百千万億兆]+|[)）])$"
+)
+# 等号の右の数式の項 (符号付きの数字、1文字の変数、漢字の語が続かない漢数字、開き括弧、根号) を検出する
+__MATH_RIGHT_TERM_PATTERN = re.compile(
+    r"[+\-−]?(?:[0-9]|[A-Za-zΑ-Ωα-ω](?![A-Za-z])|[零一二三四五六七八九十百千万億兆]+(?![一-龯々])|[(（√])"
+)
+# 等号と同じ句の中にあれば、語の式 (「面積=縦×横」「速度=距離/時間」) とみなす算術演算子
+## 行頭の「*」や「1回−阿部」のダッシュのように記号として使われやすい「*」と「−」は含めない
+## 「/」は「十二/二十八」の日付と区別するため、漢数字以外の語どうしの間だけを見る
+__MATH_OPERATOR_PATTERN = re.compile(
+    r"[+×✖⨯÷➕➗]"
+    r"|(?<=[ぁ-んァ-ヶ一-龯])(?<![〇零一二三四五六七八九十百千万億兆])[/／]"
+    r"(?![〇零一二三四五六七八九十百千万億兆])(?=[ぁ-んァ-ヶ一-龯])"
+)
 __NUMBER_MULTIPLICATION_PATTERN = re.compile(
     r"(\d+(?:\.\d+)?)\s*([×✖⨯*＊])\s*(\d+(?:\.\d+)?)"
 )
@@ -1547,7 +1565,33 @@ def __collect_normalization_details(
                 or normalized_text[normalized_start:normalized_end]
                 != normalized_fragment
             ):
-                continue
+                # 「小さじ1/2」の分数や「面積＝縦×横」の等号のように前後の文字列で変換が決まる区間は、区間だけの再変換が全文と食い違う
+                ## 直前に記録した区間までの全文の出力と、区間の前後を別々に変換した結果で全文を挟めるときだけ、その間を区間の変換結果とする
+                anchor_original_end, anchor_normalized_end = (
+                    (details[-1].original_end, details[-1].normalized_end)
+                    if details
+                    else (0, 0)
+                )
+                normalized_before = normalized_text[
+                    :anchor_normalized_end
+                ] + normalize_text(
+                    original_text[anchor_original_end:start], for_irodori=for_irodori
+                )
+                normalized_after = normalize_text(
+                    original_text[end:], for_irodori=for_irodori
+                )
+                if (
+                    normalized_text.startswith(normalized_before) is False
+                    or normalized_text.endswith(normalized_after) is False
+                    or len(normalized_before) + len(normalized_after)
+                    >= len(normalized_text)
+                ):
+                    continue
+                normalized_start = len(normalized_before)
+                normalized_end = len(normalized_text) - len(normalized_after)
+                normalized_fragment = normalized_text[normalized_start:normalized_end]
+                if normalized_fragment == original_fragment:
+                    continue
 
         details.append(
             NormalizationDetail(
@@ -1687,6 +1731,53 @@ def __replace_symbols(text: str) -> str:
     ## ここまでで URL・メールの記号は文字列化されるため、"://" のような並びは残っておらず、誤検出を回避しやすい
     ## （この段階で畳み込むことで、後段の記号読み変換に到達する前に区切り線を排除できる）
     text = collapse_divider_blocks(text)
+
+    # 数式の等号だけを残して後段で「イコール」と読み、両側が日本語の語の等号は読点へ変換する
+    ## 減算記号や範囲を読みへ変える前に、元の記号で判定する
+    def convert_equals(match: re.Match[str]) -> str:
+        before = text[: match.start()]
+        after = text[match.end() :]
+        # 「x=3」「f(x)=x」「x=√2」のように両隣が数式の項なら数式
+        if (
+            __MATH_LEFT_TERM_PATTERN.search(before) is not None
+            and __MATH_RIGHT_TERM_PATTERN.match(after) is not None
+        ):
+            return "="
+        # 「面積=縦×横」のように等号と同じ句に算術演算子があれば、語の式として数式
+        clause_before = re.search(r"[^、。,!?！？\u3000\n「」『』=]*$", before)
+        clause_after = re.match(r"[^、。,!?！？\u3000\n「」『』=]*", after)
+        if (
+            clause_before is not None
+            and __MATH_OPERATOR_PATTERN.search(clause_before.group()) is not None
+        ) or (
+            clause_after is not None
+            and __MATH_OPERATOR_PATTERN.search(clause_after.group()) is not None
+        ):
+            return "="
+        # 「ロンドン=共同」「選手たち=写真=」のように両側が日本語の語 (片側は句読点や行頭でもよい) の等号は読まずに読点で区切る
+        ## 英数字や記号が絡んで数式と認識できない等号は、従来どおり後段で「イコール」と読む
+        japanese_character = r"[ぁ-んァ-ヶー一-龯々〆]"
+        boundary_character = r"[\s、。,.!?！？「」『』（）()【】〔〕［］〈〉《》=]"
+        if (
+            (
+                before == ""
+                or re.search(rf"(?:{japanese_character}|{boundary_character})$", before)
+                is not None
+            )
+            and (
+                after == ""
+                or re.match(rf"(?:{japanese_character}|{boundary_character})", after)
+                is not None
+            )
+            and (
+                re.search(rf"{japanese_character}$", before) is not None
+                or re.match(japanese_character, after) is not None
+            )
+        ):
+            return "、"
+        return "="
+
+    text = __EQUALS_PATTERN.sub(convert_equals, text)
 
     # 数字の範囲を処理
     def convert_range(match: re.Match[str]) -> str:
