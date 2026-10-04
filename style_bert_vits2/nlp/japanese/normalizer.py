@@ -176,6 +176,17 @@ __DATE_PATTERN = re.compile(
 )
 __YEAR_MONTH_PATTERN = re.compile(r"(?<!\d)(18|19|20|21|22)(\d{2})/([0-1]?\d)(?!\d)")
 __FRACTION_PATTERN = re.compile(r"(\d+)[/／](\d+)")
+# 「1/2カップ」「1/2個分」の分量の助数詞を検出する
+## 熟語と紛れない助数詞だけを数え、後ろに「分」「弱」が続いても分数とする
+## 「株主」「合唱」と紛れる「株」「合」などは数えず、「1/2 個人面談」の「個人」も除外する
+## レシピで最もよく使う「本」は、直後が漢字でないときと「本分」のときだけ数え、「本番」「本日」「本社」は除外する
+__FRACTION_QUANTITY_PATTERN = re.compile(
+    r"[ \u3000]*(?:カップ|個(?!人)|枚|パック|杯|袋|切れ|かけ|片|房|缶|玉|本(?:分|(?![一-龯々])))"
+)
+# 「小さじ1/2」「約1/2」「1と1/2」の計量の語を検出し、「契約」のように漢字に続く「約」は除外する
+__FRACTION_MEASURE_PREFIX_PATTERN = re.compile(
+    r"(?:小さじ|大さじ|(?<![一-龯々])約|(?<![\d/])\d+と)[ \u3000]*$"
+)
 # 「Ⅱ」「ⅩⅬ」「Ⅱ‐四十二」のローマ数字と区切りを、変換と区間情報の抽出で共用
 __ROMAN_NUMERAL_PATTERN = re.compile(
     r"([Ⅰ-ⅫⅬⅭⅮⅯⅰ-ⅻⅼⅽⅾⅿ]+)(?:[-‐‑‒–—−ー](?=[0-9零〇一二三四五六七八九十百千万億兆]))?"
@@ -1621,6 +1632,10 @@ def __collect_normalization_details(
                 if normalized_fragment == original_fragment:
                     continue
 
+        # 「1/2」を前後の文字列から分数と判定した区間は、日付ではなく数値の区間として記録する
+        if category == "date" and "ぶんの" in normalized_fragment:
+            category = "number"
+
         details.append(
             NormalizationDetail(
                 original_start=start,
@@ -1902,6 +1917,13 @@ def __replace_symbols(text: str) -> str:
 
     def date_to_words(match: re.Match[str]) -> str:
         date_str = match.group(0)
+        # 「小さじ1/2」「1/3本」のように計量の語や分量の助数詞と組む「1/2」は、日付ではなく分数
+        if re.fullmatch(r"\d{1,2}/\d{1,2}", date_str) is not None and (
+            __FRACTION_MEASURE_PREFIX_PATTERN.search(text[: match.start()]) is not None
+            or __FRACTION_QUANTITY_PATTERN.match(text, match.end()) is not None
+        ):
+            numerator, denominator = date_str.split("/")
+            return f"{num2words(int(denominator), lang='ja')}ぶんの{num2words(int(numerator), lang='ja')}"
         try:
             # 連続した数字形式（YYYYMMDD）の場合
             if len(date_str) == 8 and date_str.isdigit():
