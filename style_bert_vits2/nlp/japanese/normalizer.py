@@ -132,6 +132,13 @@ __MIXED_NUMBER_RANGE_PATTERN = re.compile(
     r"(\d+(?:\.\d+)?[々〆ヵヶぁ-んァ-ヶ一-龯]+)\s*[〜~～]\s*"
     r"(?![のをがはにへとでも])(?=[ぁ-んァ-ヶ一-龯])"
 )
+# 「六〜七メートル」「100円〜200円」のように漢数字や単位付きの数から数へ続く範囲を検出する
+## 算用数字どうしだけを見る __NUMBER_RANGE_PATTERN では、漢数字や左側の単位を挟む範囲が長音へ誤変換される
+__NUMERAL_RANGE_PATTERN = re.compile(
+    r"([0-9零〇一二三四五六七八九十百千万億兆]"
+    r"(?:[^\s0-9零〇一二三四五六七八九十百千万億兆〜~～、。,.!?！？「」『』()（）]{1,3})?)"
+    r"\s*[〜~～]\s*(?=[0-9零〇一二三四五六七八九十百千万億兆])"
+)
 # U+2212 は明示的な減算記号なので、英数字変数の間ではハイフンや長音として扱わない
 __SYMBOLIC_MINUS_PATTERN = re.compile(
     r"(?<![A-Za-zΑ-Ωα-ω])([A-Za-zΑ-Ωα-ω])\s*−\s*"
@@ -1817,6 +1824,8 @@ def __replace_symbols(text: str) -> str:
     text = __NUMBER_RANGE_PATTERN.sub(convert_range, text)
     # 数値+単位から一般語へ続く範囲は、残った波ダッシュが後段で長音になる前に展開する
     text = __MIXED_NUMBER_RANGE_PATTERN.sub(r"\1から", text)
+    # 漢数字や左側に単位を伴う数どうしの範囲も、波ダッシュが後段で長音になる前に展開する
+    text = __NUMERAL_RANGE_PATTERN.sub(r"\1から", text)
 
     # 変数間の減算記号は最終文字フィルタで消える前に読みへ変換する
     text = __SYMBOLIC_MINUS_PATTERN.sub(r"\1マイナス\2", text)
