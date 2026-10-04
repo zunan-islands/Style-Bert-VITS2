@@ -205,6 +205,10 @@ __TIME_PATTERN = re.compile(r"(\d+)時(\d+)分(?:(\d+)秒)?")
 # コロン区切りの時刻・タイムスタンプ・アスペクト比を検出する
 ## 秒以下の小数はマラソン計時のように単位を付けず秒の直後へ続ける (`5秒101` など)
 __ASPECT_PATTERN = re.compile(r"(\d+)[:：](\d+)(?:[:：](\d+)(?:[.,](\d+))?)?")
+# 「1:1.618」のように小数を含む比を検出し、小数点で比が切れたり時刻と取り違えたりしないようにする
+__DECIMAL_RATIO_PATTERN = re.compile(
+    r"(?<![\d:])(?<!\d\.)(\d+(?:\.\d+)?)[:：](\d+(?:\.\d+)?)(?!\d|[.:：]\d)"
+)
 # 時間を省略した経過時間 (`34:05.101` など) を検出する
 ## 3 段の `HH:MM:SS.mmm` より先に当てると `34:05.101` がアスペクト比へ誤変換される
 __ELAPSED_TIMESTAMP_PATTERN = re.compile(
@@ -497,11 +501,12 @@ __DIGIT_ZERO_MARU = "マル"
 # 電話番号パターン: ハイフン区切り（先頭が 0 のみマッチ）
 # 0X-XXXX-XXXX / 0XX-XXX-XXXX / 0XXX-XX-XXXX / 0XXXX-X-XXXX / 0X0-XXXX-XXXX
 # 0120-XXX-XXX / 0800-XXX-XXXX / 0570-XXX-XXX / 050-XXXX-XXXX
+# 新聞や案内に多い中黒区切り (0X・XXXX・XXXX) と、市内局番を括弧で囲む表記 (0XX(XXX)XXXX) も同じ電話番号として扱う
 __PHONE_HYPHENATED_PATTERN = re.compile(
     r"(?<!\d)"
     r"(0\d{1,4})"  # 市外局番（0 で始まる 2〜5 桁）
-    r"-([\d]{1,4})"  # 市内局番
-    r"-([\d]{1,4})"  # 加入者番号
+    r"(?:-(\d{1,4})-|・(\d{1,4})・|\((\d{1,4})\))"  # 市内局番 (区切りはハイフン・中黒・括弧のいずれか1種類)
+    r"(\d{1,4})"  # 加入者番号
     r"(?!\d)"
 )
 # 電話番号パターン: ハイフンなし（既知のプレフィックスのみマッチ）
@@ -510,21 +515,27 @@ __PHONE_HYPHENATED_PATTERN = re.compile(
 # フリーコール: 0800 + 7桁 = 11桁
 # ナビダイヤル: 0570 + 6桁 = 10桁
 # IP 電話: 050 + 8桁 = 11桁
+## フリーダイヤルなどは「0120・602753」のようにプレフィックスの後だけを区切る表記もあるので、1つの区切りを許す
 __PHONE_NO_HYPHEN_PATTERN = re.compile(
     r"(?<!\d)"
     r"(?:"
     # 0120/0800/0570 は 0X0 の携帯パターンより先にマッチさせる
     # （0800 が 080+0... として携帯にマッチしてしまうのを防ぐため）
-    r"(0120)(\d{3})(\d{3})"  # フリーダイヤル: 0120-XXX-XXX
-    r"|(0800)(\d{3})(\d{4})"  # フリーコール: 0800-XXX-XXXX
-    r"|(0570)(\d{3})(\d{3})"  # ナビダイヤル: 0570-XXX-XXX
+    r"(0120)[-・]?(\d{3})(\d{3})"  # フリーダイヤル: 0120-XXX-XXX
+    r"|(0800)[-・]?(\d{3})(\d{4})"  # フリーコール: 0800-XXX-XXXX
+    r"|(0570)[-・]?(\d{3})(\d{3})"  # ナビダイヤル: 0570-XXX-XXX
     r"|(0[6-9]0)(\d{4})(\d{4})"  # 携帯: 0X0-XXXX-XXXX
     r"|(050)(\d{4})(\d{4})"  # IP 電話: 050-XXXX-XXXX
     r")"
     r"(?!\d)"
 )
+# 電話の記号の直後の、市外局番を省いた電話番号パターン: ☎XXXX-XXXX / ☎XXXX・XXXX
+__LOCAL_PHONE_AFTER_SYMBOL_PATTERN = re.compile(
+    r"(?<=☎)\s*(?<!\d)([1-9]\d{1,3})[-・](\d{4})(?!\d)"
+)
 # 郵便番号パターン: 〒 付き（〒 の後にスペースがある場合も対応）
-__POSTAL_CODE_WITH_SYMBOL_PATTERN = re.compile(r"〒\s*(\d{3})-(\d{4})")
+## 新聞の投稿先に多い「〒104・8011」のように中黒で区切った郵便番号も対象にする
+__POSTAL_CODE_WITH_SYMBOL_PATTERN = re.compile(r"〒\s*(\d{3})[-・](\d{4})")
 # 郵便番号パターン: 〒 なし（3桁-4桁）
 # 直前にハイフン+数字がある場合は除外（電話番号の一部である可能性がある）
 __POSTAL_CODE_PATTERN = re.compile(r"(?<!\d)(?<!\d-)(\d{3})-(\d{4})(?!\d)(?!-\d)")
@@ -626,9 +637,11 @@ __BUILDING_NAME_PATTERN = re.compile(
 # 号室パターン（暗黙的）: カタカナの直後の3桁以上の数字（号室/号なし）
 # 「石田ハイツ101」のようにカタカナ建物名の直後に部屋番号が来るケース
 # 漢字の直後は除外する（「西暦2024」「漢字100kg」のような誤マッチを防ぐ）
+# 中黒「・」はカタカナのブロックにあるが語の区切りなので、「東京・2024年」の数字を部屋番号として読まないよう除外する
+## 「石田ハイツ101・102」のように部屋番号を中黒で並べた列挙は、建物名に続く1つのまとまりとして扱う
 __ROOM_NUMBER_IMPLICIT_PATTERN = re.compile(
-    r"([\u30A0-\u30FF])"  # カタカナのみ（建物名末尾）
-    r"(\d{3,})"  # 3桁以上の数字（部屋番号）
+    r"([\u30A1-\u30FA\u30FC-\u30FF])"  # カタカナのみ（建物名末尾）
+    r"(\d{3,}(?:・\d{3,})*)"  # 3桁以上の数字（部屋番号）と、中黒で並べた部屋番号
     r"(?!号室|号|[a-zA-Z\d])"  # 後に号室/号/英字/数字が続かないこと
 )
 # フロア表記パターン: NF → N階, BNF → 地下N階
@@ -1260,6 +1273,12 @@ def normalize_text(
     text = re.sub(
         r"([\u2460-\u24ff\u2776-\u2793\u3251-\u325f\u32b1-\u32bf])(?=[0-9])",
         r"\1、",
+        text,
+    )
+    # 「二百三十四①」「12③」のように数の直後に続く丸数字も、NFKC で前の数と連結して「2341」「123」にならないよう読点で区切る
+    text = re.sub(
+        r"(?<=[0-9〇一二三四五六七八九十百千万])(?=[\u2460-\u24ff\u2776-\u2793\u3251-\u325f\u32b1-\u32bf])",
+        "、",
         text,
     )
 
@@ -2087,6 +2106,25 @@ def __replace_symbols(text: str) -> str:
                 result += f"タイ{num2words(seconds, lang='ja')}"
             return result
 
+    # 小数を含む比は、整数部を位取りで、小数部を1桁ずつ読み、「一タイ一点六一八」のように「タイ」でつなぐ
+    def convert_decimal_ratio(match: re.Match[str]) -> str:
+        terms = (match.group(1), match.group(2))
+        # 小数を含まない比は、時刻と比を判定する後段の処理に任せる
+        if all("." not in term for term in terms) is True:
+            return match.group(0)
+        words = []
+        for term in terms:
+            integer_digits, _, fractional_digits = term.partition(".")
+            word = str(num2words(int(integer_digits), lang="ja"))
+            if fractional_digits != "":
+                word += "点" + "".join(
+                    str(num2words(int(digit), lang="ja")) for digit in fractional_digits
+                )
+            words.append(word)
+        return "タイ".join(words)
+
+    text = __DECIMAL_RATIO_PATTERN.sub(convert_decimal_ratio, text)
+
     # 時刻またはアスペクト比パターンの処理（コロンで区切られた時分秒）
     text = __ASPECT_PATTERN.sub(convert_time_or_aspect, text)
 
@@ -2292,8 +2330,9 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         """
 
         group1 = match.group(1)  # 市外局番
-        group2 = match.group(2)  # 市内局番
-        group3 = match.group(3)  # 加入者番号
+        # 市内局番は区切りの種類 (ハイフン・中黒・括弧) ごとに別のグループに入る
+        group2 = match.group(2) or match.group(3) or match.group(4)  # 市内局番
+        group3 = match.group(5)  # 加入者番号
         len1 = len(group1)
         len2 = len(group2)
         len3 = len(group3)
@@ -2602,6 +2641,19 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
 
     text = __PHONE_HYPHENATED_PATTERN.sub(convert_phone_hyphenated_with_marker, text)
 
+    # 2b. 「☎3350・6840」のように電話の記号の直後に市外局番を省いて書いた番号も、1桁ずつ読む
+    ## 電話の記号がない「3350・6840」は年の並びなどと区別できないので変換しない
+    def convert_local_phone_after_symbol(match: re.Match[str]) -> str:
+        group1 = match.group(1)
+        group2 = match.group(2)
+        katakana1 = digits_to_katakana(group1, is_shorten_trailing=len(group1) == 3)
+        katakana2 = digits_to_katakana(group2)
+        return f"{katakana1},{katakana2}{_MARKER}"
+
+    text = __LOCAL_PHONE_AFTER_SYMBOL_PATTERN.sub(
+        convert_local_phone_after_symbol, text
+    )
+
     # 3. 〒 なし郵便番号（3桁-4桁）を処理する
     # 電話番号パターンの後に処理する（電話番号が優先されるため）
     def convert_postal_without_symbol(match: re.Match[str]) -> str:
@@ -2679,8 +2731,14 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     # 5b と同様にポーズマーカーを挿入する
     def convert_room_number_implicit(match: re.Match[str]) -> str:
         prefix_char = match.group(1)  # カタカナ
-        digits = match.group(2)  # 3桁以上の数字
-        return f"{prefix_char}'{convert_room_number_digits(digits)}"
+        digits = match.group(2)  # 3桁以上の数字 (中黒で並べた部屋番号を含む)
+        # 「ミズノ0120・320799」のように、カタカナの社名に続く番号が電話番号として成り立つなら部屋番号にしない
+        ## 電話番号は後段のステップ 7 で1桁ずつ読む
+        if __PHONE_NO_HYPHEN_PATTERN.match(match.string, match.start(2)) is not None:
+            return match.group(0)
+        return prefix_char + "・".join(
+            f"'{convert_room_number_digits(part)}" for part in digits.split("・")
+        )
 
     text = __ROOM_NUMBER_IMPLICIT_PATTERN.sub(convert_room_number_implicit, text)
 
