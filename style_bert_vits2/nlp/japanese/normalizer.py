@@ -852,6 +852,11 @@ __ENGLISH_WORD_PATTERN = re.compile(r"[a-zA-Z0-9]")
 # =========== replace_punctuation() で使う定数・正規表現パターン ===========
 
 __IRODORI_DECIMAL_PATTERN = re.compile(r"(?<![\d.])(\d+)\.(\d+)(?![\d.])")
+# 「6.2.1」「4.0.5」のように「.」で3つ以上に区切り、すべての項が先頭にゼロのない1〜2桁の節番号を検出する
+## 「1.02.003」の識別子や「192.168.0.1」の IP アドレスは、各項を整数として読み替えない
+__IRODORI_DOTTED_NUMBER_PATTERN = re.compile(
+    r"(?<![\d.])(?:0|[1-9]\d?)(?:\.(?:0|[1-9]\d?)){2,}(?!\.?\d)"
+)
 
 # 記号類の正規化マップ
 ## 置換先は style_bert_vits2.nlp.symbols.PUNCTUATIONS ( !, ?, …, ,, ., ', - ) に合わせた半角記号
@@ -1231,6 +1236,15 @@ def normalize_text(
         text, kana=False, digit=True, ascii=True, ignore="\u3000"
     )  # 全角スペースは変換しない
 
+    # 「①1回」「①1/2カップ」の丸数字が NFKC で直後の数字と連結して「11回」「1二ぶんの一」にならないよう、読点で区切る
+    ## 後段で分数や時刻へ変わる前の数字が残っているうちに区切る
+    ## 数字間の「'」による区切りは、Irodori-TTS 向けの経路で1文に2つあると鉤括弧の組に変わるので使わない
+    text = re.sub(
+        r"([\u2460-\u24ff\u2776-\u2793\u3251-\u325f\u32b1-\u32bf])(?=[0-9])",
+        r"\1、",
+        text,
+    )
+
     # 「unit　3」の空白を一時的に U+2060 へ置換して3を日本語読みで保ち、「NBA　8日」は対象外
     text = re.sub(
         r"(?<=[A-Za-z])\u3000+(?![0-9]+(?:[年月日時分秒]|[-−][0-9]))(?=[0-9])",
@@ -1343,6 +1357,13 @@ def normalize_text(
 
             return f"{integer_words}点{fractional_words}"
 
+        # 「6.2.1」の節番号は区切りごとの数を「点」でつなぎ、句点で区切られたり小数とまとめられたりしないようにする
+        res = __IRODORI_DOTTED_NUMBER_PATTERN.sub(
+            lambda m: "点".join(
+                str(num2words(int(part), lang="ja")) for part in m.group().split(".")
+            ),
+            res,
+        )
         res = __IRODORI_DECIMAL_PATTERN.sub(convert_irodori_decimal, res)
 
     # 「～」と「〜」と「~」も長音記号として扱う
@@ -3039,11 +3060,9 @@ def __convert_english_to_katakana(text: str) -> str:
 
         # 6. 数字（小数点含む）が含まれる場合、数字部分とそれ以外の部分に分割して処理
         if any(c.isdigit() for c in word):
-            # ハイフンで区切られた数字の場合はそのまま返す (例: 33-4)
-            if "-" in word:
-                parts = word.split("-")
-                if all(part.isdigit() for part in parts):
-                    return word
+            # ハイフンや点で区切られた数字の場合は、区切りを消さずにそのまま返す (例: 33-4、4-2-4-、2.4.3)
+            if re.fullmatch(r"[0-9]+(?:[-.][0-9]*)+", word) is not None:
+                return word
 
             # "iPhone 11" "Pixel8" のようなパターンに一致しない場合のみ処理
             if not __ENGLISH_WORD_WITH_NUMBER_PATTERN.search(word):
