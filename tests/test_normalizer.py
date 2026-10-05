@@ -710,6 +710,163 @@ def test_normalize_text_for_irodori_natural_prose_integration():
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("そんな草wwwww", "そんな草ワラワラ"),
+        ("マジかｗ", "マジかワラ"),
+        ("マジかw。", "マジかワラ."),
+        ("それはないｗｗ", "それはないワラワラ"),
+        ("ｗｗｗ", "ワラワラ"),
+        ("w", "ワラ"),
+        ("草ｗｗそれな", "草ワラワラそれな"),
+        ("接戦ですなｗ、見ている方も", "接戦ですなワラ,見ている方も"),
+        ("眠たくｗ　寒い", "眠たくワラ,寒い"),
+        ("明日も行けたら嬉しいですｗｗ〜", "明日も行けたら嬉しいですワラワラー"),
+        ("こんな点数ｗだけど満足", "こんな点数ワラだけど満足"),
+        ("笑ったww, nice", "笑ったワラワラ,ナイス"),
+        ("笑ったww.\nHello", "笑ったワラワラ..ハロー"),
+        ("ｗｗｗ\nこんにちは", "ワラワラ.こんにちは"),
+        ("ﾏｼﾞｗ", "マジワラ"),
+        ("笑ったww、Xで見たよ。", "笑ったワラワラ,Xで見たよ."),
+    ],
+)
+def test_normalize_text_laughing_w(text: str, expected: str, for_irodori: bool) -> None:
+    """
+    日本語の文字や和文の記号の直後に続く小文字の「w」「ｗ」の並びと、括弧や行の中で単独で置かれた並びを、1個なら「ワラ」、2個以上なら「ワラワラ」と読むことを確認する。
+    全角の「ｗ」は NFKC で半角になり、半角の「www」は英単語のカタカナ変換で「ウィウ」のように読まれてしまうので、どちらの経路でも先に読みへ置き換える必要がある。
+    「点数ｗだけど」のように IME で打った全角の「ｗ」は、直後に日本語が続いても笑いとして読む。
+    「ﾏｼﾞｗ」のように半角カタカナに続く「ｗ」も笑いとして読む。
+    「笑ったww, nice」「笑ったww、Xで見たよ。」や、次の行が英文で始まる「笑ったww.」は、後ろの英字を変数の列とみなさずに笑いとして読む。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(".", "。").replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("（ｗ）", "'ワラ'", "（ワラ）"),
+        (
+            "返信は［ｗ］だけだった。",
+            "返信は'ワラ'だけだった.",
+            "返信は「ワラ」だけだった。",
+        ),
+        ("｛ｗ｝", "ワラ", "ワラ"),
+    ],
+)
+def test_normalize_text_laughing_w_in_brackets(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    丸括弧・角括弧・波括弧の中に単独で置かれた「ｗ」を、笑いとして「ワラ」と読むことを確認する。
+    括弧そのものの変換は経路ごとに異なるので、経路ごとの出力を並べて確かめる。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "www.example.com",
+        "http://www.example.com/",
+        "WWW",
+        "Ｗｏｗ",
+        "ｗｋｔｋ",
+        "3w",
+        "幅wの長方形",
+        "Twitter",
+        "w/o",
+        "pwの値を求める",
+        "―ｗフラグを付けて実行する",
+        "関数をｗ，ｘ，ｙ，ｚの式で表す",
+        "x, wの値",
+        "w@example.com",
+        "https://example.com/?q=w&lang=ja",
+        "重み w=4.25 を使う。",
+        "幅 w の長方形",
+        "-w を指定する。",
+        "w、x、y",
+        "x,  w",
+        "変数w²を使う",
+        "値はw₁",
+        "重みw≠0の場合だけ計算する。",
+        "重みw≤0",
+        "重みw≥0",
+        "重みw≦0",
+        "重みw≧0",
+        "重みw≈0",
+        "幅wﾒｰﾄﾙの長方形を描く。",
+    ],
+)
+def test_normalize_text_laughing_w_excludes_words_and_variables(
+    text: str, for_irodori: bool
+) -> None:
+    """
+    英単語・URL・メールアドレスの中の「w」、大文字の「W」、数字に付いた単位、オプションの「-w」は、笑いとして「ワラ」と読まないことを確認する。
+    変数の「w」も笑いにしない。半角で書いて直後に日本語が続くもの (「幅wの長方形」「幅wﾒｰﾄﾙ」)、空白の後に置いたもの (「重み w=4.25」)、比較や等号の演算子が続くもの (「w≠0」「w≦0」)、上付きや下付きの数字が続くもの (「w²」「w₁」)、1文字の英字と読点で並ぶもの (「w、x、y」) が対象である。
+    """
+
+    assert "ワラ" not in normalize_text(text, for_irodori=for_irodori)
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("w@example.com", "w,アットマーク,イグザンプルドットコム"),
+        (
+            "https://example.com/?q=w&lang=ja",
+            "エイチティーティーピーエス,イグザンプルドットコム,スラッシュ,クエスチョン,qイコールw,アンド,ラングイコールジャ",
+        ),
+    ],
+)
+def test_normalize_text_laughing_w_keeps_url_and_email_reading(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    URL やメールアドレスの中の「w」を笑いとして書き換えず、アットマークやドメインを含むアドレス全体の読みが従来どおり保たれることを確認する。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "original_text", "normalized_text"),
+    [
+        ("そんな草wwwww", "wwwww", "ワラワラ"),
+        ("こんな点数ｗだけど満足", "ｗ", "ワラ"),
+    ],
+)
+def test_normalize_text_return_details_tracks_laughing_w(
+    text: str, original_text: str, normalized_text: str, for_irodori: bool
+) -> None:
+    """
+    笑いの「w」を「ワラ」「ワラワラ」へ置き換えた区間が、発話内容を変えた記号の区間として details に記録されることを確認する。
+    音声と照合する処理は details の区間を原表記へ戻すので、記録がないと「ワラワラ」が書き起こしに残ってしまう。
+    """
+
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    assert [
+        (detail.original_text, detail.normalized_text, detail.category)
+        for detail in result.details
+    ] == [(original_text, normalized_text, "symbol")]
+    detail = result.details[0]
+    assert text[detail.original_start : detail.original_end] == original_text
+    assert (
+        result.text[detail.normalized_start : detail.normalized_end] == normalized_text
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("Ⅱ", "二"),
         ("Ⅲ", "三"),
         ("Ⅵ", "六"),

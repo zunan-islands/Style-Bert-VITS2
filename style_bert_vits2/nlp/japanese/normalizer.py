@@ -93,6 +93,31 @@ __NON_NFKC_ENCLOSED_NUMBER_TRANSLATE_TABLE = str.maketrans(
 # 例: "5090 32G" → "509032G" → 「ゴジュウマンキュウセンサンジュウニ」を防止
 __DIGIT_SPACE_DIGIT_PATTERN = re.compile(r"(\d)\s+(\d)")
 
+# 笑いを表す小文字の「w」「ｗ」の並び (大文字の「W」は「WWW」のような略語に使われ、笑いの意味ではほとんど使われないので対象にしない)
+__LAUGHING_W_RUN_PATTERN = re.compile(r"[wｗ]+")
+# 笑いの「w」の直前に来る日本語の文字と和文の記号 (ひらがな・カタカナ・半角カタカナ・漢字・長音・句読点・感嘆符・疑問符・三点リーダー・波ダッシュ・閉じ括弧)
+__LAUGHING_W_PRECEDING_CHAR_PATTERN = re.compile(
+    r"[\u3040-\u30FF\uFF66-\uFF9F\u3400-\u4DBF\u4E00-\u9FFF々〆。、！？!?…‥〜～）」』】〕］｝]"
+)
+# 1個の「w」の直後に続くと、全角か半角かで笑いと変数を見分ける日本語の文字 (ひらがな・カタカナ・半角カタカナ・漢字・長音)
+__JAPANESE_LETTER_PATTERN = re.compile(
+    r"[\u3040-\u30FF\uFF66-\uFF9F\u3400-\u4DBF\u4E00-\u9FFF々〆]"
+)
+# 前後が文頭・文末・改行・全角括弧だけで、それだけで1つのまとまりになっている「（ｗ）」や「ｗｗｗ」だけの行の前後に来る文字
+__STANDALONE_LAUGHING_W_OPENING_PATTERN = re.compile(r"[\n（「『【〔［｛]")
+__STANDALONE_LAUGHING_W_CLOSING_PATTERN = re.compile(r"[\s）」』】〕］｝]")
+# 「w」の直後にあれば変数や英単語の一部と判断する文字 (NFKC 後の英数字と、本体の正規化が読む算術・比較・等号・論理・集合の演算子。上付き・下付きの数字も NFKC で数字になる)
+__NON_LAUGHING_W_FOLLOWING_CHAR_PATTERN = re.compile(
+    r"[A-Za-z0-9_=+\-*/^<>−×÷±∓@≠≒≈≅≡≢≤≦⩽≥≧⩾∧∨¬∈∉∪∩⊂⊆]"
+)
+# 「ｗ，ｘ，ｙ，ｚ」のように1文字の英字と読点で並ぶ変数の列 (句点や改行は越えない)
+__VARIABLE_LIST_FOLLOWING_PATTERN = re.compile(
+    r"[ \t\u3000]*[,，、][ \t\u3000]*[A-Za-zＡ-Ｚａ-ｚ](?![A-Za-zＡ-Ｚａ-ｚ])"
+)
+__VARIABLE_LIST_PRECEDING_PATTERN = re.compile(
+    r"(?<![A-Za-zＡ-Ｚａ-ｚ])[A-Za-zＡ-Ｚａ-ｚ][ \t\u3000]*[,，、][ \t\u3000]*$"
+)
+
 # =========== __replace_symbols() で使う正規表現パターン ===========
 
 __DATE_ZERO_PADDING_PATTERN = re.compile(r"(?<!\d)0(\d)(?=月|日|時|分|秒)")
@@ -1259,6 +1284,12 @@ def normalize_text(
 
     original_text = text
 
+    # 笑いを表す「w」は1個なら「ワラ」、2個以上なら「ワラワラ」と読む
+    ## 全角と半角の区別で笑いと変数を見分けるので、全角英数を半角にする前の原文で判定する
+    ## 英単語のカタカナ変換で「www」が「ウィウ」と読まれる前に、読みへ置き換えておく
+    for start, end in reversed(__find_laughing_w_spans(text)):
+        text = text[:start] + ("ワラ" if end - start == 1 else "ワラワラ") + text[end:]
+
     # 「Ｍａｃ　ＯＳ　Ｘ」「Ｍａｃ　OS」のように片側でも全角英字なら全角空白を半角化し、英単語を続けて読む
     # 「Mac　OS　X」の半角英字同士の全角空白は保持し、後段で読点へ変換
     text = re.sub(
@@ -1562,6 +1593,11 @@ def __collect_normalization_details(
         (match.start(), match.end(), "symbol", 54)
         for match in __CROSS_MARK_AS_KAKERU_PATTERN.finditer(search_text)
     )
+    # 「ワラ」「ワラワラ」と読む笑いの「w」は、本文の置換と同じ判定で記号の区間として残す
+    candidates.extend(
+        (start, end, "symbol", 56)
+        for start, end in __find_laughing_w_spans(original_text)
+    )
     # NFKC で数字へ展開される囲み数字も、発話内容を変えた元区間として残す
     candidates.extend(
         (match.start(), match.end(), "number", 55)
@@ -1677,6 +1713,76 @@ def __collect_normalization_details(
         occupied_until = end
 
     return tuple(details)
+
+
+def __find_laughing_w_spans(text: str) -> list[tuple[int, int]]:
+    """
+    笑いを表す「w」「ｗ」の並びの区間を、全角英数を半角にする前の原文から探す。
+    本文の置換と details の記録で同じ判定を使うため、両方から呼ばれる。
+
+    Args:
+        text (str): 正規化前のテキスト
+
+    Returns:
+        list[tuple[int, int]]: 笑いと判定した区間の開始位置と終了位置
+    """
+
+    # URL とメールアドレスの区間は、中の「w」を判定せずにアドレスとして読ませる
+    ## jaconv.z2h() は1文字対1文字のため、半角化した文字列の位置をそのまま原文に使える
+    halfwidth_text = jaconv.z2h(text, kana=False, digit=True, ascii=True)
+    protected_spans = [
+        match.span()
+        for pattern in (__URL_PATTERN, __EMAIL_PATTERN)
+        for match in pattern.finditer(halfwidth_text)
+    ]
+
+    spans: list[tuple[int, int]] = []
+    for match in __LAUGHING_W_RUN_PATTERN.finditer(text):
+        start, end = match.span()
+        if any(
+            start < protected_end and protected_start < end
+            for protected_start, protected_end in protected_spans
+        ):
+            continue
+
+        previous_char = text[start - 1] if start > 0 else ""
+        next_char = text[end] if end < len(text) else ""
+        # 直後の英数字・演算子・上付きや下付きの数字は NFKC 後の形で判定し、「w²」「w=4.25」「wkt」を除外する
+        normalized_next_char = unicodedata.normalize("NFKC", next_char)[:1]
+        if (
+            __NON_LAUGHING_W_FOLLOWING_CHAR_PATTERN.fullmatch(normalized_next_char)
+            is not None
+        ):
+            continue
+        # 「ｗ，ｘ，ｙ，ｚ」「x、w」のように1文字の英字と読点で並ぶ変数の列を除外する
+        ## 2個以上の並びは1文字の変数ではないので、「笑ったww、Xで見たよ」の後ろの英字では除外しない
+        if len(match.group()) == 1 and (
+            __VARIABLE_LIST_FOLLOWING_PATTERN.match(text, end) is not None
+            or __VARIABLE_LIST_PRECEDING_PATTERN.search(text[:start]) is not None
+        ):
+            continue
+
+        # 日本語の文字や和文の記号の直後に空白を挟まず続く「w」を笑いとする
+        if __LAUGHING_W_PRECEDING_CHAR_PATTERN.fullmatch(previous_char) is not None:
+            # 1個の「w」の直後に日本語が続く場合、IME で打つ全角の「ｗ」は笑い、半角の「w」は「幅wの長方形」のような変数とする
+            if (
+                match.group() == "w"
+                and __JAPANESE_LETTER_PATTERN.fullmatch(next_char) is not None
+            ):
+                continue
+            spans.append((start, end))
+        # 「（ｗ）」や「ｗｗｗ」だけの行のように、文頭・改行・括弧に挟まれて単独で置かれた「w」も笑いとする
+        elif (
+            previous_char == ""
+            or __STANDALONE_LAUGHING_W_OPENING_PATTERN.fullmatch(previous_char)
+            is not None
+        ) and (
+            next_char == ""
+            or __STANDALONE_LAUGHING_W_CLOSING_PATTERN.fullmatch(next_char) is not None
+        ):
+            spans.append((start, end))
+
+    return spans
 
 
 def __replace_symbols(text: str) -> str:
