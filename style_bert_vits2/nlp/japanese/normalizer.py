@@ -540,8 +540,10 @@ __LOCAL_PHONE_AFTER_SYMBOL_PATTERN = re.compile(
     r"(?<=☎)\s*(?<!\d)([1-9]\d{1,3})[-・](\d{4})(?!\d)"
 )
 # 郵便番号パターン: 〒 付き（〒 の後にスペースがある場合も対応）
-## 新聞の投稿先に多い「〒104・8011」のように中黒で区切った郵便番号も対象にする
-__POSTAL_CODE_WITH_SYMBOL_PATTERN = re.compile(r"〒\s*(\d{3})[-・](\d{4})")
+## 新聞の投稿先に多い「〒104・8011」のように中黒で区切った郵便番号も対象にし、ハイフン区切りとは別のグループに入れる
+__POSTAL_CODE_WITH_SYMBOL_PATTERN = re.compile(
+    r"〒\s*(\d{3})(?:-(\d{4})|・(\d{4})(?!\d))"
+)
 # 郵便番号パターン: 〒 なし（3桁-4桁）
 # 直前にハイフン+数字がある場合は除外（電話番号の一部である可能性がある）
 __POSTAL_CODE_PATTERN = re.compile(r"(?<!\d)(?<!\d-)(\d{3})-(\d{4})(?!\d)(?!-\d)")
@@ -2644,6 +2646,12 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     # 〒 が __SYMBOL_YOMI_MAP で「郵便番号」に変換される前に処理する必要がある
     def convert_postal_with_symbol(match: re.Match[str]) -> str:
         first3 = match.group(1)
+        # 中黒で区切った郵便番号は、中黒で区切った電話番号と同じく0を「ゼロ」として1桁ずつ読み、区切りで間を置く
+        if match.group(3) is not None:
+            return (
+                f"郵便番号{digits_to_katakana(first3)},"
+                f"{digits_to_katakana(match.group(3))}{_MARKER}"
+            )
         last4 = match.group(2)
         return f"郵便番号{convert_postal_code_digits(first3, last4)}{_MARKER}"
 
