@@ -207,6 +207,8 @@ __DATE_PATTERN = re.compile(
 )
 __YEAR_MONTH_PATTERN = re.compile(r"(?<!\d)(18|19|20|21|22)(\d{2})/([0-1]?\d)(?!\d)")
 __FRACTION_PATTERN = re.compile(r"(\d+)[/／](\d+)")
+# 計量スプーンの直後の「2分1」を分数とし、所要時間の「2分1秒」は区別する
+__SPOON_FRACTION_PATTERN = re.compile(r"(小さじ|大さじ)\s*(\d+)分(\d+)(?!\d)")
 # 「1/2カップ」「1/2個分」の分量の助数詞を検出する
 ## 熟語と紛れない助数詞だけを数え、後ろに「分」「弱」が続いても分数とする
 ## 「株主」「合唱」と紛れる「株」「合」などは数えず、「1/2 個人面談」の「個人」も除外する
@@ -795,6 +797,15 @@ __UNIT_PATTERN = re.compile(
     r"(?P<suffix>/[hs])?"
     r"(?=($|(?=/([^A-Za-z]|$))|[^/A-Za-z]))"
 )
+# 中黒で連結した単位の負の1乗は、数量あたりの値として「マイ」を付けて読む
+## 英単語や型番内へ広げず、既知の単位だけが連続する表記を対象にする
+__RECIPROCAL_COMPOUND_UNIT_PATTERN = re.compile(
+    r"(?<![A-Za-z])(?P<number>[0-9]+(?:\.[0-9]+)?\s*)?(?P<unit>"
+    + "|".join(re.escape(unit) for unit in (*__UNIT_MAP, "ml", "min"))
+    + r")(?P<denominators>(?:[・⋅·](?:"
+    + "|".join(re.escape(unit) for unit in (*__UNIT_MAP, "ml", "min"))
+    + r")(?:\^?[-−－]1|⁻¹))+)(?![A-Za-z0-9]|\.[0-9])"
+)
 # `1h25m23s` のような連続時間表記を検出する
 ## 単独の `50m` はメートルとして残すため、時間単位が2つ以上連続する場合だけマッチする
 ## `50ms` を `50分+秒` と誤読しないよう、直後に `/` や英数字が続く場合は除外する
@@ -1368,6 +1379,22 @@ def normalize_text(
 
     text = __ROMAN_NUMERAL_PATTERN.sub(convert_roman_numeral, text)
 
+    # 複合単位の指数を、マイナス記号の変換や英語の読み替えより先に解釈する
+    def convert_reciprocal_compound_unit(match: re.Match[str]) -> str:
+        units = [
+            match.group("unit"),
+            *re.findall(r"[・⋅·]([A-Za-z0-9μ]+)", match.group("denominators")),
+        ]
+        # 「毎分」が接尾辞の「ゴト」と「ブン」に分かれるのを避け、単位の読みを明示する
+        return (match.group("number") or "") + "マイ".join(
+            "フン" if unit == "min" else __UNIT_MAP["mL" if unit == "ml" else unit]
+            for unit in units
+        )
+
+    text = __RECIPROCAL_COMPOUND_UNIT_PATTERN.sub(
+        convert_reciprocal_compound_unit, text
+    )
+
     # Unicode 正規化前に記号を変換
     # 正規化前でないと ℃ などが unicodedata.normalize() で分割されてしまう
     res = __replace_symbols(text)
@@ -1520,6 +1547,7 @@ def __collect_normalization_details(
         (__ROOM_NUMBER_IMPLICIT_PATTERN, "number", 15),
         (__FLOOR_PATTERN, "number", 16),
         (__COMPACT_DURATION_PATTERN, "unit", 17),
+        (__RECIPROCAL_COMPOUND_UNIT_PATTERN, "unit", 17),
         (__DEGREE_UNIT_PATTERN, "unit", 18),
         (__PAGE_UNIT_PATTERN, "unit", 19),
         (__UNIT_PATTERN, "unit", 20),
@@ -1531,6 +1559,7 @@ def __collect_normalization_details(
         (__NUMBER_MATH_PATTERN, "number", 26),
         (__NUMBER_MULTIPLICATION_PATTERN, "number", 27),
         (__NUMBER_COMPARISON_PATTERN, "number", 28),
+        (__SPOON_FRACTION_PATTERN, "number", 29),
         (__FRACTION_PATTERN, "number", 29),
         (__ZERO_HOUR_PATTERN, "number", 30),
         (__TIME_PATTERN, "number", 31),
@@ -2135,6 +2164,14 @@ def __replace_symbols(text: str) -> str:
             return f"{num2words(denominator, lang='ja')}ぶんの{num2words(numerator, lang='ja')}"
         except ValueError:
             return match.group(0)
+
+    # 計量スプーンの分数の省略表記を、分母・分子の順を保って展開する
+    text = __SPOON_FRACTION_PATTERN.sub(
+        lambda m: (
+            f"{m.group(1)}{num2words(int(m.group(2)), lang='ja')}ぶんの{num2words(int(m.group(3)), lang='ja')}"
+        ),
+        text,
+    )
 
     # 分数パターンの変換
     text = __FRACTION_PATTERN.sub(convert_fraction, text)

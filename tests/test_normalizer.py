@@ -5,6 +5,7 @@ normalize_text() のテスト。
 新しいテスト関数を追加する際は、対応する処理ステップの位置に挿入すること。
 """
 
+import pyopenjtalk
 import pytest
 
 from style_bert_vits2.nlp.japanese.normalizer import (
@@ -2188,6 +2189,10 @@ def test_normalize_text_fractions():
     [
         # 計量の語や分量の助数詞と組む「1/2」は、日付ではなく分数として読む
         ("小さじ１／２", "小さじ二ぶんの一"),
+        ("砂糖大さじ２分１を加える", "砂糖大さじ二ぶんの一を加える"),
+        ("塩小さじ 4分3を量る", "塩小さじ四ぶんの三を量る"),
+        ("小さじ12分10", "小さじ十二ぶんの十"),
+        ("作業時間は2分1秒", "作業時間は2分1秒"),
         ("約１／２カップ", "約二ぶんの一カップ"),
         ("にんじん１／３本", "にんじん三ぶんの一本"),
         ("にんじん1/2本分", "にんじん二ぶんの一本分"),
@@ -3760,6 +3765,66 @@ def test_normalize_text_cross_mark_context_dependent() -> None:
 
     # ❌ のバリエーションセレクタ付き
     assert normalize_text("❌\ufe0f") == "バツ"
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("5mL・kg−1・min−1", "5ミリリットルマイキログラムマイフン"),
+        ("五ｍｌ・ｋｇ−１・ｍｉｎ−１", "五ミリリットルマイキログラムマイフン"),
+        ("8mg・kg^-1", "8ミリグラムマイキログラム"),
+        ("2L·s⁻¹", "2リットルマイ秒"),
+    ],
+)
+def test_normalize_reciprocal_compound_units(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """複合単位の負の1乗を「マイ」で読み、元の数量と単位の関係を保つ。"""
+
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+def test_reciprocal_compound_unit_replacement_details() -> None:
+    """複合単位の読み替えを、元の単位表記と対応する区間で返す。"""
+
+    result = normalize_text("5mL・kg−1・min−1", return_details=True)
+    assert [
+        (detail.category, detail.original_text, detail.normalized_text)
+        for detail in result.details
+    ] == [
+        ("unit", "5mL・kg−1・min−1", "5ミリリットルマイキログラムマイフン"),
+    ]
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("mL・kg−1・min−1", "ミリリットルマイキログラムマイフン"),
+        ("L・min−1", "リットルマイフン"),
+        ("L・s−1", "リットルマイビョー"),
+    ],
+)
+def test_reciprocal_compound_units_keep_time_unit_readings(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """正規化した単位を時間の読みで発音し、「分」の「ブン」への分割を避ける。"""
+
+    normalized = normalize_text(text, for_irodori=for_irodori)
+    assert (
+        pyopenjtalk.g2p(
+            normalized, kana=True, use_sudachi_kanji_yomi=False, predict_nani=False
+        )
+        == expected
+    )
+
+
+def test_reciprocal_compound_unit_rejects_other_exponents() -> None:
+    """「マイ」を使った読み替えの対象を、既知の単位の負の1乗に限定する。"""
+
+    for text in ["mL・kg−10", "mL・kg−1.5", "xml・kg−1"]:
+        assert "マイ" not in normalize_text(text)
 
 
 def test_normalize_text_symbols():
