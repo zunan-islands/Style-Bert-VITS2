@@ -4987,6 +4987,122 @@ def test_normalize_text_english():
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("Ｎｏ．１", "ナンバー1"),
+        ("No.124", "ナンバー124"),
+        ("NO.二百七十三", "ナンバー二百七十三"),
+        ("no.九十五", "ナンバー九十五"),
+        ("ｎｏ．１２４", "ナンバー124"),
+        ("No. 12", "ナンバー12"),
+        ("No.　12", "ナンバー12"),
+        ("No.0", "ナンバー0"),
+        ("No.❸", "ナンバー3"),
+        ("No.③", "ナンバー3"),
+        ("番号No.12の札", "番号ナンバー12の札"),
+        ("No.百二十四を紹介", "ナンバー百二十四を紹介"),
+    ],
+)
+def test_normalize_text_number_labels(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    算用数字や漢数字が続く「No.」を「ナンバー」に書き換える。
+    全角表記や丸数字にも同じ規則を適用する。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("No, thank you", "ノー,サンクユー", "ノー、サンクユー"),
+        ("No.と書かれた札", "ノー.と書かれた札", "ノー。と書かれた札"),
+        ("No.", "ノー.", "ノー。"),
+        ("No.40p", "ノー40p", "ノー40p"),
+        ("受付番号No.A-102", "受付番号ノーA102", "受付番号ノーA102"),
+        ("Piano.1", "ピアノ1", "ピアノ1"),
+        ("NO1", "ナンバーワン", "ナンバーワン"),
+    ],
+)
+def test_normalize_text_number_label_non_targets(
+    text: str, expected: str, expected_irodori: str, for_irodori: bool
+) -> None:
+    """
+    数字が続かない「No.」や、英字を含む通し番号の読みを保つ。
+    ピリオドのない「NO1」も、英語読みを保つ。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        (
+            "He said no. 3 people heard him.",
+            "ヒーセッドノー.3ピープルハードヒム.",
+            "ヒーセッドノー。3ピープルハードヒム。",
+        ),
+        (
+            "She said No. 12 people left.",
+            "シーセッドノー.12ピープルレフト.",
+            "シーセッドノー。12ピープルレフト。",
+        ),
+        (
+            "He answered no. 3 friends listened.",
+            "ヒーアンサードノー.3フレンズリスンド.",
+            "ヒーアンサードノー。3フレンズリスンド。",
+        ),
+        (
+            "He said ｎｏ． ３ people heard him.",
+            "ヒーセッドノー.3ピープルハードヒム.",
+            "ヒーセッドノー。3ピープルハードヒム。",
+        ),
+        (
+            "He said no. 1,000 people heard him.",
+            "ヒーセッドノー.1000ピープルハードヒム.",
+            "ヒーセッドノー。1000ピープルハードヒム。",
+        ),
+        (
+            "He said no. 3.5 people heard him.",
+            "ヒーセッドノー.3.5ピープルハードヒム.",
+            "ヒーセッドノー。三点五ピープルハードヒム。",
+        ),
+        (
+            "He said no. 3 people heard him. He said no. 3 people heard him.",
+            "ヒーセッドノー.3ピープルハードヒム.ヒーセッドノー.3ピープルハードヒム.",
+            "ヒーセッドノー。3ピープルハードヒム。ヒーセッドノー。3ピープルハードヒム。",
+        ),
+        ("No.124", "ナンバー124", "ナンバー124"),
+        ("No. 12", "ナンバー12", "ナンバー12"),
+        (
+            "Please read No. 12.",
+            "プリーズリードナンバー12.",
+            "プリーズリードナンバー12。",
+        ),
+        ("page No.124", "ページナンバー124", "ページナンバー124"),
+    ],
+)
+def test_normalize_text_number_labels_preserve_english_negation(
+    text: str, expected: str, expected_irodori: str, for_irodori: bool
+) -> None:
+    """
+    前後に英単語がある英文の「no.」は否定語として残し、独立した番号の読みも保つ。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("ＯＬのとき", "オーエルのとき"),
         ("ＮＥＷＳのメンバー", "ニュースのメンバー"),
         ("ＭＣ", "エムシー"),

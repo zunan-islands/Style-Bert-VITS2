@@ -141,6 +141,15 @@ __URL_PATTERN = re.compile(
     r"https?://[-a-zA-Z0-9.]+(?:[/?#][-a-zA-Z0-9._~:/?#\[\]@!$&\'()*+,;=%]*)?"
 )
 __EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+# 数字が続く「No.」は番号の略記として読む
+## 数字の後に英字が続く「No.40p」などは、通し番号として通常の読みを保つ
+## 前後に英単語がある英文では、否定語の「no.」として表記を残す
+__NUMBER_LABEL_PATTERN = re.compile(
+    r"(?<![A-Za-z])(?P<english_prefix>[A-Za-z]+[ \t\u3000]+)?(?i:No)\.[ \t\u3000]*"
+    r"(?=[0-9零〇一二三四五六七八九十百千万億兆①-⑳❶-❿⓫-⓴➀-➉➊-➓㉑-㉟㊱-㊿]+"
+    r"(?![A-Za-z0-9零〇一二三四五六七八九十百千万億兆①-⑳❶-❿⓫-⓴➀-➉➊-➓㉑-㉟㊱-㊿])"
+    r"(?:[,.][0-9]+)*(?P<english_suffix>[ \t\u3000]+[A-Za-z]+)?)"
+)
 # 英数・かな・カナ・漢字のワード文字を判定するパターン
 __WORD_CHAR_PATTERN = re.compile(r"[A-Za-z0-9\u3040-\u30FF\u4E00-\u9FFF]")
 # 候補記号と空白のみで構成される3文字以上の塊を粗抽出
@@ -2391,6 +2400,17 @@ def __replace_symbols(text: str) -> str:
     ## 日付・数式・分数などの処理の後に実行する（それらが優先されるため）
     ## 記号類辞書置換（〒→郵便番号）の前に実行する（〒 を含むパターンを先に処理するため）
     text = __normalize_phone_postal_address_floor(text)
+
+    # 番号を表す「No.」を住所や号室の判定後に「ナンバー」へ展開し、後続の数字を保つ
+    text = __NUMBER_LABEL_PATTERN.sub(
+        lambda m: (
+            m.group()
+            if m.group("english_prefix") is not None
+            and m.group("english_suffix") is not None
+            else f"{m.group('english_prefix') or ''}ナンバー"
+        ),
+        text,
+    )
 
     # × 系文字の文脈依存読み分け
     # 両側に漢字・カタカナ・数字・アルファベットがある場合 → 「かける」（コラボ・寸法等）
