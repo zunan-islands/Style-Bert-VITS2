@@ -4123,6 +4123,113 @@ def test_reciprocal_compound_unit_rejects_other_exponents() -> None:
         assert "マイ" not in normalize_text(text)
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("（≧∇≦）", "''", "（）"),
+        ("(≧∇≦)", "''", "（）"),
+        ("（≧▽≦）", "''", "（）"),
+        ("（≧ω≦）プッ！！", "''プッ!!", "（）プッ！！"),
+        ("（≧△≦）", "''", "（）"),
+        ("（≧_≦）", "''", "（）"),
+        ("（ ≧ ∇ ≦ ）", "''", "（）"),
+        ("(≥▽≤)", "''", "（）"),
+        ("（＞▽＜）", "''", "（）"),
+        ("嬉しい（≧∇≦）です", "嬉しい''です", "嬉しい（）です"),
+        ("でしたぁ♪ヾ（≧▽≦）ノ", "でしたぁ''", "でしたぁ（）"),
+        ("ヾ(≧ω≦)ﾉ", "''", "（）"),
+        ("1（≧∇≦）2", "1''2", "1（）2"),
+    ],
+)
+def test_normalize_text_kaomoji(
+    text: str, expected: str, expected_irodori: str, for_irodori: bool
+) -> None:
+    """
+    括弧に囲まれた顔文字の目・口・手を除去する。
+    括弧はポーズ表現として残し、前後の数字は分けて読む。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("（x≧0）", "'x大なりイコール0'", "（x大なりイコール0）"),
+        ("a≦b", "a小なりイコールb", "a小なりイコールb"),
+        (
+            "（≧x≦）",
+            "'大なりイコールx小なりイコール'",
+            "（大なりイコールx小なりイコール）",
+        ),
+        (
+            "（≧３≦）",
+            "'大なりイコール3小なりイコール'",
+            "（大なりイコール3小なりイコール）",
+        ),
+        (
+            "（≧π≦）",
+            "'大なりイコールパイ小なりイコール'",
+            "（大なりイコールパイ小なりイコール）",
+        ),
+        ("（∇）", "'ナブラ'", "（ナブラ）"),
+        ("（笑）", "'笑'", "（笑）"),
+        (
+            "（≧∇≦",
+            "'大なりイコールナブラ小なりイコール",
+            "（大なりイコールナブラ小なりイコール",
+        ),
+        ("楽しい（＾▽＾）", "楽しい''", "楽しい（）"),
+    ],
+)
+def test_normalize_text_kaomoji_non_targets(
+    text: str, expected: str, expected_irodori: str, for_irodori: bool
+) -> None:
+    """
+    英数字を含む不等式や、顔文字の目と口が揃わない記号の読みを保つ。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        (
+            "嬉しい(>_<)ノートを買った",
+            "嬉しい''ノートを買った",
+            "嬉しい（）ノートを買った",
+        ),
+        ("(>_<)ノイズ", "''ノイズ", "（）ノイズ"),
+        ("(>_<)ノンストップ", "''ノンストップ", "（）ノンストップ"),
+        ("(>_<)ﾉｰﾄ", "''ノート", "（）ノート"),
+        ("（≧∇≦）ノート", "''ノート", "（）ノート"),
+        ("ヾ(≧ω≦)ﾉｲｽﾞ", "''ノイズ", "（）ノイズ"),
+        ("(>_<)ノ", "''", "（）"),
+        ("(>_<)ﾉ", "''", "（）"),
+        ("(>_<)ノ。", "''.", "（）。"),
+        ("(>_<)ノ ありがとう", "''ありがとう", "（）ありがとう"),
+    ],
+)
+def test_normalize_text_kaomoji_keeps_following_katakana_words(
+    text: str, expected: str, expected_irodori: str, for_irodori: bool
+) -> None:
+    """
+    顔文字に続くカタカナ語の先頭を保ち、単独の「ノ」「ﾉ」は顔文字の手として除去する。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
 def test_normalize_text_symbols():
     """記号関連の正規化のテスト"""
     # 基本的な記号

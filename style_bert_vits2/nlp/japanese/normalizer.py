@@ -120,6 +120,12 @@ __VARIABLE_LIST_PRECEDING_PATTERN = re.compile(
 
 # =========== __replace_symbols() で使う正規表現パターン ===========
 
+# 不等号を目に見立てた顔文字を検出し、数式の英数字は読みを保つ
+## 閉じ括弧の後の「ノ」「ﾉ」は、カタカナ語の先頭なら残し、単独なら顔文字の手として除去する
+__KAOMOJI_PATTERN = re.compile(
+    r"[ヾヽ]?([（(])[ \t\u3000]*[≧≥>＞][ \t\u3000]*[∇▽△ω_]"
+    r"[ \t\u3000]*[≦≤<＜][ \t\u3000]*([）)])(?:[ノﾉ](?![ァ-ヶーｦ-ﾟ]))?"
+)
 __DATE_ZERO_PADDING_PATTERN = re.compile(r"(?<!\d)0(\d)(?=月|日|時|分|秒)")
 __WEEKDAY_PATTERN = re.compile(
     r"("  # 日付部分をキャプチャ開始
@@ -1902,6 +1908,9 @@ def __replace_symbols(text: str) -> str:
     Returns:
         str: 正規化されたテキスト
     """
+
+    # 顔文字の目・口・手を除去し、括弧はポーズ処理へ渡す
+    text = __KAOMOJI_PATTERN.sub(r"\1\2", text)
 
     # 月・日・時・分・秒のゼロ埋めを除去
     text = __DATE_ZERO_PADDING_PATTERN.sub(r"\1", text)
