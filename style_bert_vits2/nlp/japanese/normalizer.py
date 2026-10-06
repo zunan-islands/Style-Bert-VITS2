@@ -882,21 +882,28 @@ __CURRENCY_MAP = {
 __CURRENCY_PATTERN = re.compile(
     r"([$¥€£₩₹₽₺฿₱₴₫₪₦₡₿﷼₠₢₣₤₥₧₨₭₮₯₰₲₳₵₶₷₸₻₼₾])([0-9.]*[0-9])|([0-9.]*[0-9])([$¥€£₩₹₽₺฿₱₴₫₪₦₡₿﷼₠₢₣₤₥₧₨₭₮₯₰₲₳₵₶₷₸₻₼₾])"
 )
-# 終点が省略された数量の範囲は、文末・句読点・閉じ括弧・空白の前だけ「から」と読む
+# 終点が省略された範囲の波ダッシュと、その直後の区切りを照合する
+__OPEN_ENDED_RANGE_SUFFIX_PATTERN = re.compile(
+    r"\s*[〜~～](?=$|[\s、。,.!?！？:;…‥）)」』】〕\]}〉》”’'\"])"
+)
+# 終点が省略された数量の範囲は、文末・句読点・閉じ括弧・閉じ引用符・空白の前だけ「から」と読む
 ## 単位は既知の表記に限定し、「7か年戦略〜」など数量以外に続く波ダッシュは長音として残す
 ## 単位のない漢数字は漢字に続くものを除外し、「世界一〜」の末尾も長音として残す
 ## 全角の「～」は前段で半角の「~」に変換されるため、両方を照合する
 __OPEN_ENDED_NUMBER_RANGE_PATTERN = re.compile(
-    r"((?<![A-Za-z0-9])(?:[0-9零〇一二三四五六七八九十百千万億兆京]+"
-    r"(?:[.点][0-9零〇一二三四五六七八九]+)?"
-    r"\s*(?:[年月日時分秒](?:間|半)?|[かヶケ箇]月|週間|か年|"
+    r"((?<![A-Za-z0-9])(?:[0-9零〇一二三四五六七八九十百千万億兆京]+(?:,[0-9]{3})*"
+    r"(?:[.点][0-9零〇一二三四五六七八九]+)?[十百千万億兆京]*"
+    r"\s*(?:[年月日時分秒](?:間)?(?:半)?|[かヶケ箇]月(?:半)?|週間(?:半)?|か年|"
     r"[円人名個本枚台冊回度歳才匹頭羽件組着足箱袋杯合軒戸社校席粒缶束割泊]|"
     r"パーセント|ページ|"
     + "|".join(
         re.escape(unit) for unit in (*__UNIT_MAP.values(), *__CURRENCY_MAP.values())
     )
-    + r")|[0-9]+(?:\.[0-9]+)?|(?<![一-龯々])[零〇一二三四五六七八九十百千万億兆京]+))"
-    r"\s*[〜~～](?=$|[\s、。,.!?！？:;…‥）)」』】〕\]}〉》])"
+    + r")(?:毎[秒時])?|[0-9][0-9零〇一二三四五六七八九十百千万億兆京]*(?:,[0-9]{3})*"
+    r"(?:\.[0-9]+)?[十百千万億兆京]*|"
+    r"(?<![一-龯々])[零〇一二三四五六七八九十百千万億兆京]+"
+    r"(?:点[零〇一二三四五六七八九]+)?[十百千万億兆京]*))"
+    + __OPEN_ENDED_RANGE_SUFFIX_PATTERN.pattern
 )
 
 # 化学式・化学種としてよく現れる英数字トークンの読み
@@ -1653,6 +1660,36 @@ def __collect_normalization_details(
         for match in re.finditer(r"[❶-❿⓫-⓴➀-➉➊-➓]", search_text)
     )
 
+    # 終点のない範囲は数量から波ダッシュまでをまとめ、先頭の通貨記号も原文の区間に含める
+    for match in __OPEN_ENDED_NUMBER_RANGE_PATTERN.finditer(search_text):
+        start = match.start()
+        if start > 0 and search_text[start - 1] in __CURRENCY_MAP:
+            start -= 1
+        candidates.append((start, match.end(), "number", 23))
+
+    # 英字に続く数字は直前の英単語と合わせて変換し、その語の中で範囲表現かどうかを判定する
+    for match in re.finditer(
+        r"(?<![A-Za-z])[A-Za-z]+(?P<number>[0-9]+(?:\.[0-9]+)?)"
+        + __OPEN_ENDED_RANGE_SUFFIX_PATTERN.pattern,
+        search_text,
+    ):
+        normalized_context = normalize_text(
+            original_text[match.start() : match.end()], for_irodori=for_irodori
+        )
+        if normalized_context.endswith("から"):
+            candidates.append((match.start("number"), match.end(), "number", 23))
+
+    # 単位・日時の略記は元のパターンで照合し、展開後に「から」と読まれる波ダッシュまで区間を伸ばす
+    for start, end, _category, _priority in tuple(candidates):
+        suffix = __OPEN_ENDED_RANGE_SUFFIX_PATTERN.match(search_text, end)
+        if suffix is not None:
+            range_end = suffix.end()
+            normalized_range = normalize_text(
+                original_text[start:range_end], for_irodori=for_irodori
+            )
+            if normalized_range.endswith("から"):
+                candidates.append((start, range_end, "number", 23))
+
     details: list[NormalizationDetail] = []
     occupied_until = 0
     for start, end, category, _priority in sorted(
@@ -1671,8 +1708,20 @@ def __collect_normalization_details(
             original_fragment,
             for_irodori=for_irodori,
         )
-        normalized_start = len(
-            normalize_text(original_text[:start], for_irodori=for_irodori)
+        # 表記が変わらない候補は出力位置の計算を省く
+        if normalized_fragment == original_fragment:
+            continue
+
+        # 記録済みの区間の末尾を起点にし、未処理の文字列だけで次の出力位置を求める
+        anchor_original_end, anchor_normalized_end = (
+            (details[-1].original_end, details[-1].normalized_end)
+            if details
+            else (0, 0)
+        )
+        normalized_start = anchor_normalized_end + len(
+            normalize_text(
+                original_text[anchor_original_end:start], for_irodori=for_irodori
+            )
         )
         # × の「かける」は前後の文字で決まるので、前後1文字を含めて変換し中央の読みを取る
         ## 記号だけの再変換は「バツ」になる。全文と同じ文脈で読んだ中央だけを details の読みにする
@@ -1705,11 +1754,11 @@ def __collect_normalization_details(
             continue
         normalized_end = normalized_start + len(normalized_fragment)
         if normalized_text[normalized_start:normalized_end] != normalized_fragment:
-            # 「text　1kg」は候補末尾までの正規化結果から、空白変換を反映した出力位置を求める
+            # 「text　1kg」のような例では、起点から候補末尾までの正規化結果に空白変換を反映する
             normalized_prefix = normalize_text(
-                original_text[:end], for_irodori=for_irodori
+                original_text[anchor_original_end:end], for_irodori=for_irodori
             )
-            normalized_end = len(normalized_prefix)
+            normalized_end = anchor_normalized_end + len(normalized_prefix)
             normalized_start = normalized_end - len(normalized_fragment)
             if (
                 normalized_start < 0
@@ -1718,11 +1767,6 @@ def __collect_normalization_details(
             ):
                 # 「小さじ1/2」の分数や「面積＝縦×横」の等号のように前後の文字列で変換が決まる区間は、区間だけの再変換が全文と食い違う
                 ## 直前に記録した区間までの全文の出力と、区間の前後を別々に変換した結果で全文を挟めるときだけ、その間を区間の変換結果とする
-                anchor_original_end, anchor_normalized_end = (
-                    (details[-1].original_end, details[-1].normalized_end)
-                    if details
-                    else (0, 0)
-                )
                 normalized_before = normalized_text[
                     :anchor_normalized_end
                 ] + normalize_text(

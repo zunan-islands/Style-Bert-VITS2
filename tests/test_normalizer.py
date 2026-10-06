@@ -8,6 +8,7 @@ normalize_text() のテスト。
 import pyopenjtalk
 import pytest
 
+from style_bert_vits2.nlp.japanese import normalizer as japanese_normalizer
 from style_bert_vits2.nlp.japanese.normalizer import (
     __IRODORI_SYMBOL_REPLACE_MAP,  # pyright: ignore[reportPrivateUsage]
     NormalizationResult,
@@ -1549,6 +1550,229 @@ def test_normalize_text_open_ended_number_ranges(
     assert normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori) == (
         expected_irodori if for_irodori is True else expected
     )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize("wave_dash", ["〜", "～"])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("27万〜", "27万から", "27万から"),
+        ("1.5万〜", "1.5万から", "一点五万から"),
+        ("二点五〜", "二点五から", "二点五から"),
+        ("二点五万〜", "二点五万から", "二点五万から"),
+        ("２７万〜", "27万から", "27万から"),
+        ("27億〜", "27億から", "27億から"),
+        ("1万5千〜", "1万5千から", "1万5千から"),
+        ("三十六点零〜", "三十六点零から", "三十六点零から"),
+        ("2.5万円〜", "2.5万円から", "二ー点五万円から"),
+        ("二点五〜の値", "二点五ーの値", "二点五ーの値"),
+        ("27万〜の予算", "27万ーの予算", "27万ーの予算"),
+        ("世界一〜", "世界一ー", "世界一ー"),
+        ("Ver.2〜", "バー2から", "バー2から"),
+        ("iPhone15〜", "アイフォン15から", "アイフォン15から"),
+        ("第3〜", "第3から", "第3から"),
+    ],
+)
+def test_normalize_text_open_ended_mixed_and_decimal_numbers(
+    text: str, expected: str, expected_irodori: str, wave_dash: str, for_irodori: bool
+) -> None:
+    """
+    単位のない混在表記や漢数字の小数も数量の範囲として読み、助詞の前は長音を保つ。
+    """
+
+    assert normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize("wave_dash", ["〜", "～"])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("5m/s〜", "5メートル毎秒から"),
+        ("60km/h〜", "60キロメートル毎時から"),
+        ("5メートル毎秒〜", "5メートル毎秒から"),
+        ("60キロメートル毎時〜", "60キロメートル毎時から"),
+        ("3時間半〜", "3時間半から"),
+        ("1か月半〜", "1か月半から"),
+        ("1ヶ月半〜", "1ヶ月半から"),
+        ("1週間半〜", "1週間半から"),
+        ("三時間半〜", "三時間半から"),
+        ("一か月半〜", "一か月半から"),
+        ("3h30m〜", "3時間30分から"),
+        ("3時間半〜の予定", "3時間半ーの予定"),
+        ("1か月半〜を想定", "1か月半ーを想定"),
+        ("5m/s〜で動く", "5メートル毎秒ーで動く"),
+        ("毎秒〜", "毎秒ー"),
+        ("半〜", "半ー"),
+    ],
+)
+def test_normalize_text_open_ended_rates_and_half_durations(
+    text: str, expected: str, wave_dash: str, for_irodori: bool
+) -> None:
+    """
+    毎秒・毎時への単位展開と「半」を含む期間にも数量の範囲を適用する。
+    """
+
+    assert (
+        normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori)
+        == expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize("wave_dash", ["〜", "～"])
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("“100円〜”", "'100円から'", "「100円から」"),
+        ("‘100円〜’", "'100円から'", "「100円から」"),
+        ("'100円〜'", "'100円から'", "「100円から」"),
+        ('"100円〜"', "'100円から'", "「100円から「"),
+        ("“100円〜”、相談可", "'100円から',相談可", "「100円から」、相談可"),
+        ("‘10時〜’", "'10時から'", "「10時から」"),
+        ("“27万〜”", "'27万から'", "「27万から」"),
+        ("“ね〜”", "'ねー'", "「ねー」"),
+        ("‘月1度〜の方針’", "'月1度ーの方針'", "「月1度ーの方針」"),
+    ],
+)
+def test_normalize_text_open_ended_ranges_before_closing_quotes(
+    text: str, expected: str, expected_irodori: str, wave_dash: str, for_irodori: bool
+) -> None:
+    """
+    閉じ引用符の前でも数量の範囲は「から」と読み、語尾や助詞の前の長音は保つ。
+    """
+
+    assert normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori) == (
+        expected_irodori if for_irodori is True else expected
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize("wave_dash", ["〜", "～"])
+@pytest.mark.parametrize(
+    ("text", "original_fragment", "expected_fragment", "expected_irodori_fragment"),
+    [
+        ("予算100円〜。", "100円〜", "100円から", "100円から"),
+        ("27万円〜", "27万円〜", "27万円から", "27万円から"),
+        ("1,000円〜", "1,000円〜", "1000円から", "1000円から"),
+        ("受付10:30〜", "10:30〜", "十時30分から", "十時30分から"),
+        ("2026/10/7〜", "2026/10/7〜", "2026年10月7日から", "2026年10月7日から"),
+        ("¥1,000〜", "¥1,000〜", "1000円から", "1000円から"),
+        ("2.5kg〜", "2.5kg〜", "2.5キログラムから", "二ー点五キログラムから"),
+        ("50%〜", "50%〜", "50パーセントから", "50パーセントから"),
+        ("5m/s〜", "5m/s〜", "5メートル毎秒から", "5メートル毎秒から"),
+        ("60km/h〜", "60km/h〜", "60キロメートル毎時から", "60キロメートル毎時から"),
+        ("3時間半〜", "3時間半〜", "3時間半から", "3時間半から"),
+        ("1か月半〜", "1か月半〜", "1か月半から", "1か月半から"),
+        ("27万〜", "27万〜", "27万から", "27万から"),
+        ("1.5万〜", "1.5万〜", "1.5万から", "一点五万から"),
+        ("二点五〜", "二点五〜", "二点五から", "二点五から"),
+        ("“100円〜”", "100円〜", "100円から", "100円から"),
+        ("‘100円〜’", "100円〜", "100円から", "100円から"),
+        ("100円 〜", "100円 〜", "100円から", "100円から"),
+        ("２７万〜", "２７万〜", "27万から", "27万から"),
+        ("3h30m〜", "3h30m〜", "3時間30分から", "3時間30分から"),
+        ("Ver.2〜", "2〜", "2から", "2から"),
+        ("iPhone15〜", "15〜", "15から", "15から"),
+        ("第3〜", "3〜", "3から", "3から"),
+    ],
+)
+def test_normalize_text_open_ended_range_details(
+    text: str,
+    original_fragment: str,
+    expected_fragment: str,
+    expected_irodori_fragment: str,
+    wave_dash: str,
+    for_irodori: bool,
+) -> None:
+    """
+    数量から波ダッシュまでを一つの数値区間として記録し、単位や日付の展開結果にも対応付ける。
+    """
+
+    text = text.replace("〜", wave_dash)
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    assert result.text == normalize_text(text, for_irodori=for_irodori)
+    assert [
+        (detail.category, detail.original_text, detail.normalized_text)
+        for detail in result.details
+    ] == [
+        (
+            "number",
+            original_fragment.replace("〜", wave_dash),
+            expected_irodori_fragment if for_irodori is True else expected_fragment,
+        )
+    ]
+    detail = result.details[0]
+    assert text[detail.original_start : detail.original_end] == detail.original_text
+    assert (
+        result.text[detail.normalized_start : detail.normalized_end]
+        == detail.normalized_text
+    )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+def test_normalize_text_open_ended_range_details_preserve_context(
+    for_irodori: bool,
+) -> None:
+    """
+    複数の範囲をそれぞれ記録し、助詞の前や数量でない語尾の長音は範囲の区間から外す。
+    """
+
+    text = "予算100円〜、受付10:30〜。月1度～の方針、よろしく〜"
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    assert [
+        (detail.category, detail.original_text, detail.normalized_text)
+        for detail in result.details
+    ] == [("number", "100円〜", "100円から"), ("number", "10:30〜", "十時30分から")]
+    for detail in result.details:
+        assert text[detail.original_start : detail.original_end] == detail.original_text
+        assert (
+            result.text[detail.normalized_start : detail.normalized_end]
+            == detail.normalized_text
+        )
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize("count", [30, 90])
+def test_normalize_text_range_details_normalizes_linear_amount_of_text(
+    monkeypatch: pytest.MonkeyPatch, count: int, for_irodori: bool
+) -> None:
+    """
+    番号付きの語が繰り返されても、区間情報の再変換量は入力長に比例する範囲に抑える。
+    実行時間のばらつきに依存せず、再変換した文字数と全区間の位置を検証する。
+    """
+
+    normalized_character_count = 0
+
+    def normalize_fragment(text: str, for_irodori: bool = False) -> str:
+        nonlocal normalized_character_count
+        normalized_character_count += len(text)
+        return normalize_text(text, for_irodori=for_irodori)
+
+    monkeypatch.setattr(japanese_normalizer, "normalize_text", normalize_fragment)
+    text = "iPhone15〜、" * count
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+    expected = "アイフォン15から、" if for_irodori is True else "アイフォン15から,"
+    assert result.text == expected * count
+    assert len(result.details) == count
+    for index, detail in enumerate(result.details):
+        assert (detail.original_start, detail.original_end) == (
+            index * 10 + 6,
+            index * 10 + 9,
+        )
+        assert (detail.normalized_start, detail.normalized_end) == (
+            index * 10 + 5,
+            index * 10 + 9,
+        )
+        assert (detail.category, detail.original_text, detail.normalized_text) == (
+            "number",
+            "15〜",
+            "15から",
+        )
+    assert normalized_character_count <= len(text) * 8
 
 
 def test_normalize_text_ranges():
