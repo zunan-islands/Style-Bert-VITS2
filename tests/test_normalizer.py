@@ -4538,6 +4538,61 @@ def test_normalize_text_chemical_formula_like_words():
     assert normalize_text("CPUを8基で学習した。") == "シーピーユーを8基で学習した."
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("❹③に重しをし、", "4,3に重しをし,"),
+        ("❷①を水で洗って", "2,1を水で洗って"),
+        ("❹①に②と③を加えて", "4,1に2と3を加えて"),
+        ("➋①", "2,1"),
+        ("⓫③", "11,3"),
+        ("❹➂", "4,3"),
+        ("❿⑩", "10,10"),
+        ("➓㉑", "10,21"),
+        ("❹③❷①", "4,3,2,1"),
+    ],
+)
+def test_normalize_text_black_and_white_circled_numbers(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    黒丸数字から白丸数字へ続く手順番号を、読点で区切って読む。
+    複数の組があっても、それぞれの数字を分けて読む。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("❶", "1"),
+        ("①", "1"),
+        ("❶❷❸❹❺❻❼❽❾❿", "12345678910"),
+        ("⓫⓬⓭⓮⓯⓰⓱⓲⓳⓴", "11121314151617181920"),
+        ("➊➋➌➍➎➏➐➑➒➓", "12345678910"),
+        ("①②③④⑤⑥⑦⑧⑨⑩", "12345678910"),
+        ("➀➁➂➃➄➅➆➇➈➉", "12345678910"),
+        ("①1回", "1,1回"),
+        ("12③", "12,3"),
+    ],
+)
+def test_normalize_text_circled_number_non_targets(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    同じ種類の丸数字の連続と、数字に隣接する読点の区切り方を保つ。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 def test_normalize_text_enclosed_characters():
     """囲み文字の正規化のテスト"""
     # 丸付き数字
