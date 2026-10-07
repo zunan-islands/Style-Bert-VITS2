@@ -87,6 +87,18 @@ def load_safetensors(
     else:
         current_state_dict = model.state_dict()
 
+    # 新しい weight_norm API で保存されたパラメータ名を、読み込み先が要求する旧形式の名前に変換する
+    ## 重みの値は変えず、旧形式のパラメータが既に含まれている場合はその値を使う
+    for suffix, legacy_suffix in (
+        (".parametrizations.weight.original0", ".weight_g"),
+        (".parametrizations.weight.original1", ".weight_v"),
+    ):
+        for key in list(tensors):
+            if key.endswith(suffix):
+                legacy_key = key.removesuffix(suffix) + legacy_suffix
+                if legacy_key in current_state_dict and legacy_key not in tensors:
+                    tensors[legacy_key] = tensors.pop(key)
+
     new_state_dict: dict[str, torch.Tensor] = dict(tensors)
     for key, current_tensor in current_state_dict.items():
         if key not in tensors:
