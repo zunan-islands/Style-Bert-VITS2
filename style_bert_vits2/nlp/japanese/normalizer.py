@@ -3414,7 +3414,8 @@ def __convert_english_to_katakana(text: str) -> str:
                 return join_word.join(katakana_sub_words)
 
         # 6. 数字（小数点含む）が含まれる場合、数字部分とそれ以外の部分に分割して処理
-        if any(c.isdigit() for c in word):
+        # 分割は ASCII 数字で行うので、「໒」のような isdigit() が真になる ASCII 以外の数字だけの単語はここに入れない (同じ単語で再帰し続けるため)
+        if __NUMBER_PATTERN.search(word):
             # ハイフンや点で区切られた数字の場合は、区切りを消さずにそのまま返す (例: 33-4、4-2-4-、2.4.3)
             if re.fullmatch(r"[0-9]+(?:[-.][0-9]*)+", word) is not None:
                 return word
