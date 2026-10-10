@@ -377,6 +377,36 @@ def test_normalize_text_return_details_omits_unmodified_or_non_target_ranges(
 
 
 @pytest.mark.parametrize(
+    ("text", "original_text", "normalized_text"),
+    [
+        ("全体の½が賛成", "½", "二ぶんの一"),
+    ],
+)
+def test_normalize_text_return_details_records_reading_rules(
+    text: str, original_text: str, normalized_text: str
+) -> None:
+    """
+    分数の文字や負の数の符号、単位記号のように読みを書き換えた区間が、details に元の文字列と書き換えた後の文字列の組として記録されることを確認する。
+    記録が抜けると、details から原文を復元するときに書き換えた後の読みが原文に残る。
+    """
+
+    result = normalize_text(text, for_irodori=True, return_details=True)
+
+    matching_details = [
+        detail
+        for detail in result.details
+        if detail.original_text == original_text
+        and detail.normalized_text == normalized_text
+    ]
+    assert len(matching_details) == 1
+    detail = matching_details[0]
+    assert text[detail.original_start : detail.original_end] == original_text
+    assert (
+        result.text[detail.normalized_start : detail.normalized_end] == normalized_text
+    )
+
+
+@pytest.mark.parametrize(
     ("text", "expected", "expected_analysis_text"),
     [
         # 部屋番号の漢数字の直後の読点と句点を「、」「。」のまま残し、pyopenjtalk に「一〇一」を桁区切りの「百一」と読ませない
@@ -2848,6 +2878,23 @@ def test_normalize_text_fractions():
         ("1/2本社休業", "1月2日本社休業"),
         ("1/2株主総会", "1月2日株主総会"),
         ("1/2合唱団の公演", "1月2日合唱団の公演"),
+        # 割合を表す語の後や、比べる語・増減・長さや束の単位が続く「1/2」も、日付ではなく分数として読む
+        ("確率は1/2です", "確率は二ぶんの一です"),
+        ("全体の1/3が賛成した", "全体の三ぶんの一が賛成した"),
+        ("全体の１／４が賛成した", "全体の四ぶんの一が賛成した"),
+        ("直径5/8インチのねじ", "直径八ぶんの五インチのねじ"),
+        ("ほうれん草1/4束", "ほうれん草四ぶんの一束"),
+        ("2/3以上の賛成", "三ぶんの二以上の賛成"),
+        ("1/10に減った", "十ぶんの一に減った"),
+        # 割合や単位の手がかりがない「1/2」は、従来どおり日付として読む
+        ("8/1から働く", "8月1日から働く"),
+        ("明日6/9観に行く", "明日6月9日観に行く"),
+        ("来週の6/9に会う", "来週の6月9日に会う"),
+        ("1/2丁目", "1月2日丁目"),
+        # 「½」のような分数の文字は、日付と紛れないので常に分数として読み、前に整数があれば「と」でつなぐ
+        ("全体の½が賛成した", "全体の二ぶんの一が賛成した"),
+        ("¼", "四ぶんの一"),
+        ("1½カップ", "1と二ぶんの一カップ"),
     ],
 )
 def test_normalize_text_quantity_fractions(

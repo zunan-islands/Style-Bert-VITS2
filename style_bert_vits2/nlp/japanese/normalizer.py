@@ -244,6 +244,19 @@ __FRACTION_QUANTITY_PATTERN = re.compile(
 __FRACTION_MEASURE_PREFIX_PATTERN = re.compile(
     r"(?:小さじ|大さじ|(?<![一-龯々])約|(?<![\d/])\d+と)[ \u3000]*$"
 )
+# 「確率は1/2」「全体の1/3」のように、割合を表す語の後の「1/2」を検出する
+__FRACTION_RATIO_PREFIX_PATTERN = re.compile(
+    r"(?:全体|全部|全員|半数|人口|確率|割合|比率|面積|体積|およそ|ほぼ|わずか)(?:の|は|が)?[ \u3000]*$"
+)
+# 「2/3以上」「1/10に減った」「5/8インチ」「1/4束」のように、比べる語・増減・長さや束の単位が続く「1/2」を検出する
+## 「1/2丁目」の「丁目」は住所なので除く
+__FRACTION_RATIO_SUFFIX_PATTERN = re.compile(
+    r"[ \u3000]*(?:以上|以下|未満|程度|ほど|くらい|ぐらい"
+    r"|に(?:減|増|縮|下が|上が|落ち|低下|削減|短縮|拡大)"
+    r"|インチ|フィート|マイル|ポンド|オンス|束|節|丁(?!目))"
+)
+# 「½」「¼」のような分数の文字と、その前の整数 (「1½」) を検出する
+__VULGAR_FRACTION_PATTERN = re.compile(r"(\d*)([½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅐⅛⅜⅝⅞⅑⅒])")
 # 「Ⅱ」「ⅩⅬ」「Ⅱ‐四十二」のローマ数字と区切りを、変換と区間情報の抽出で共用
 __ROMAN_NUMERAL_PATTERN = re.compile(
     r"([Ⅰ-ⅫⅬⅭⅮⅯⅰ-ⅻⅼⅽⅾⅿ]+)(?:[-‐‑‒–—−ー](?=[0-9零〇一二三四五六七八九十百千万億兆]))?"
@@ -1855,6 +1868,7 @@ def __collect_normalization_details(
         (__NUMBER_COMPARISON_PATTERN, "number", 28),
         (__SPOON_FRACTION_PATTERN, "number", 29),
         (__FRACTION_PATTERN, "number", 29),
+        (__VULGAR_FRACTION_PATTERN, "number", 29),
         (__ZERO_HOUR_PATTERN, "number", 30),
         (__TIME_PATTERN, "number", 31),
         (__ELAPSED_TIMESTAMP_PATTERN, "number", 32),
@@ -2450,12 +2464,28 @@ def __replace_symbols(text: str) -> str:
     # R6.1.1, H31.4.30, S64.1.7 などにマッチ
     text = __WAREKI_PATTERN.sub(convert_wareki, text)
 
+    # 「½」のような分数の文字は日付と紛れないので、「二ぶんの一」と分数で書き、前の整数とは「と」でつなぐ
+    ## NFKC は「½」を分数の斜線の「1⁄2」にするので、そのままでは後段で「1'2」と区切られる
+    def convert_vulgar_fraction(match: re.Match[str]) -> str:
+        numerator, denominator = unicodedata.normalize("NFKC", match.group(2)).split(
+            "\u2044"
+        )
+        return (
+            (f"{match.group(1)}と" if match.group(1) else "")
+            + f"{num2words(int(denominator), lang='ja')}ぶんの{num2words(int(numerator), lang='ja')}"
+        )
+
+    text = __VULGAR_FRACTION_PATTERN.sub(convert_vulgar_fraction, text)
+
     def date_to_words(match: re.Match[str]) -> str:
         date_str = match.group(0)
-        # 「小さじ1/2」「1/3本」のように計量の語や分量の助数詞と組む「1/2」は、日付ではなく分数
+        # 「小さじ1/2」「1/3本」のように計量の語や分量の助数詞と組む「1/2」と、
+        # 「確率は1/2」「2/3以上」のように割合の語や比べる語と組む「1/2」は、日付ではなく分数
         if re.fullmatch(r"\d{1,2}/\d{1,2}", date_str) is not None and (
             __FRACTION_MEASURE_PREFIX_PATTERN.search(text[: match.start()]) is not None
             or __FRACTION_QUANTITY_PATTERN.match(text, match.end()) is not None
+            or __FRACTION_RATIO_PREFIX_PATTERN.search(text[: match.start()]) is not None
+            or __FRACTION_RATIO_SUFFIX_PATTERN.match(text, match.end()) is not None
         ):
             numerator, denominator = date_str.split("/")
             return f"{num2words(int(denominator), lang='ja')}ぶんの{num2words(int(numerator), lang='ja')}"
