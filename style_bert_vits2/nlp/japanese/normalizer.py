@@ -1153,6 +1153,46 @@ __ENGLISH_WORD_WITH_NUMBER_PATTERN = re.compile(
     r"([a-zA-Z]+)[\s-]?([1-9]|1[01])(?!\d|\.\d|-\d)"  # 12 以降は英語読みしない
 )
 __ENGLISH_WORD_PATTERN = re.compile(r"[a-zA-Z0-9]")
+# 「Q1」「H3」「IE6」のように大文字の略語の直後に空白やハイフンを挟まず 0〜11 の数が続く語を検出する
+## 「TEL03」の「03」のように 0 で始まる数字の並びは番号なので含めない
+## 12 以上は英語で読むことが少ないので、数を残してコアに日本語の位取りで読ませる (「COP29」は「シーオーピーニジューキュー」、「V12」は「ブイジューニ」)
+## 「G20」(「ジートゥエンティー」) のように 12 以上でも英語で読むのが一般的な語は、英単語のカタカナ読みの表 (katakana_map.py) が読みを持つ
+__ACRONYM_WITH_ENGLISH_NUMBER_PATTERN = re.compile(r"([A-Z]+)(0|[1-9]|1[01])")
+# 「CLV3か国」「SAM4連装」「E8系」「B6判」のように、英字の直後の数の後ろに続く日本語の助数詞を検出する
+## この数は英字の名前の一部でなく、助数詞で数える数量や型式の番号なので、英字と分けて数を残し、コアに日本語で読ませる (「E8系」は「イーハチケイ」、「B6判」は「ビーロクバン」)
+__JAPANESE_COUNTER_AFTER_ACRONYM_NUMBER_PATTERN = re.compile(
+    r"[かカヶケヵ箇]国|系|判|連装|単位|基"
+)
+# 大文字の略語を1文字ずつ読むときの英字の読み
+## 「J」「K」は英単語のカタカナ読みの表の「J1」「K1」(「ジェイワン」「ケーワン」) に揃える
+__ACRONYM_LETTER_YOMI_MAP = {
+    "A": "エー",
+    "B": "ビー",
+    "C": "シー",
+    "D": "ディー",
+    "E": "イー",
+    "F": "エフ",
+    "G": "ジー",
+    "H": "エイチ",
+    "I": "アイ",
+    "J": "ジェイ",
+    "K": "ケー",
+    "L": "エル",
+    "M": "エム",
+    "N": "エヌ",
+    "O": "オー",
+    "P": "ピー",
+    "Q": "キュー",
+    "R": "アール",
+    "S": "エス",
+    "T": "ティー",
+    "U": "ユー",
+    "V": "ブイ",
+    "W": "ダブリュー",
+    "X": "エックス",
+    "Y": "ワイ",
+    "Z": "ゼット",
+}
 
 # =========== replace_punctuation() で使う定数・正規表現パターン ===========
 
@@ -3740,6 +3780,35 @@ def __convert_english_to_katakana(text: str) -> str:
         if len(word) == 1 and word.isupper() is True:
             return word
 
+        # 大文字の略語の直後の 0〜11 の数は、英字を1文字ずつ読み、数を英語で読む (「Q1」は「キューワン」、「H3」は「エイチスリー」)
+        ## 単位の「B」「L」は「5B」「2L」のように数の後に付くので、「B1」「L1」もここで英字として読む
+        ## 英単語のカタカナ読みの表にある語 (「F1」「G7」) と小文字で表にある略語 (「COP6」「NO1」の「NO」など) は従来の経路で読む
+        ## 「IE6」の「IE」のように大文字だけで表にある略語は、表の読みを使う
+        acronym_with_number_match = __ACRONYM_WITH_ENGLISH_NUMBER_PATTERN.fullmatch(
+            word
+        )
+        if (
+            acronym_with_number_match is not None
+            and KATAKANA_MAP.get(word) is None
+            and KATAKANA_MAP.get(word.lower()) is None
+            and KATAKANA_MAP.get(acronym_with_number_match.group(1).lower()) is None
+        ):
+            acronym = acronym_with_number_match.group(1)
+            acronym_yomi = KATAKANA_MAP.get(acronym)
+            # NGram が英単語として読むと判定した表にない語は、従来どおり C2K の経路で読む
+            if (
+                acronym_yomi is not None
+                or __should_transliterated_word_by_ngram(acronym) is False
+            ):
+                if acronym_yomi is None:
+                    acronym_yomi = "".join(
+                        __ACRONYM_LETTER_YOMI_MAP[letter] for letter in acronym
+                    )
+                return acronym_yomi + process_english_word(
+                    num2words(int(acronym_with_number_match.group(2)), lang="en"),
+                    enable_romaji_c2k=True,
+                )
+
         # 数値（小数点を含む）を取り除いた後の文字列が UNIT_MAP に含まれる単位と完全一致する場合は実行しない
         # これにより、KATAKANA_MAP に "tb" が "ティービー" として別の読みで含まれていたとしても変換されずに済む
         word_without_numbers = __NUMBER_PATTERN.sub("", word)
@@ -4152,11 +4221,13 @@ def __convert_english_to_katakana(text: str) -> str:
             # 整数部分のみを取得（小数点がない場合は元の数字文字列と同じ）
             int_part = num_str
 
-            # 0-11の数字であり、かつその後に英数字が続く場合は分割
+            # 0-11の数字であり、かつその後に英数字か日本語の助数詞が続く場合は分割
             if int_part and 0 <= int(int_part) <= 11:
-                # 数字の後に英数字が続くかどうかを確認
+                # 数字の後に英数字か、「3か国」「6判」のような日本語の助数詞が続くかどうかを確認
                 has_alnum_after = j < len(text) and (
                     __ENGLISH_WORD_PATTERN.match(text[j]) is not None
+                    or __JAPANESE_COUNTER_AFTER_ACRONYM_NUMBER_PATTERN.match(text, j)
+                    is not None
                 )
 
                 if has_alnum_after:
@@ -4164,9 +4235,21 @@ def __convert_english_to_katakana(text: str) -> str:
                     is_all_alpha = all(
                         __ALPHABET_PATTERN.match(c) for c in current_word
                     )
-                    converted = process_english_word(
-                        current_word, enable_romaji_c2k=True
+                    # 12 以上の数の途中で区切ったときは、英字だけを読みに変え、取り込んだ桁はそのまま残す
+                    ## 「XP40Pro」は「XP4」と「0Pro」に割れるので、「XP4」を「エックスピーフォー」と英語で読まないようにする
+                    mid_number_match = (
+                        re.fullmatch(r"([a-zA-Z]+)([0-9]+)", current_word)
+                        if text[i - 1].isdigit()
+                        else None
                     )
+                    if mid_number_match is not None:
+                        converted = process_english_word(
+                            mid_number_match.group(1), enable_romaji_c2k=True
+                        ) + mid_number_match.group(2)
+                    else:
+                        converted = process_english_word(
+                            current_word, enable_romaji_c2k=True
+                        )
                     words.append(converted)
                     is_english_converted.append(
                         is_all_alpha
