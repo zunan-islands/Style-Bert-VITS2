@@ -1923,6 +1923,10 @@ def __collect_normalization_details(
         (__WEEKDAY_PATTERN, "date", 2),
         (__DATE_PATTERN, "date", 3),
         (__WAREKI_PATTERN, "date", 4),
+        # 元号と、点で区切った年月日を1つの区間にし、年月日だけの再変換で西暦の日付と読まれる食い違いを避ける
+        (__ERA_DOTTED_DATE_PATTERN, "date", 4),
+        # 鉄道車両の形式記号と車両番号を1つの区間にし、番号だけの再変換で郵便番号と読まれる食い違いを避ける
+        (__RAILWAY_CAR_NUMBER_PATTERN, "number", 5),
         (__POSTAL_CODE_WITH_SYMBOL_PATTERN, "number", 5),
         (__POSTAL_CODE_PATTERN, "number", 6),
         (__PHONE_HYPHENATED_PATTERN, "number", 7),

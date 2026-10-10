@@ -413,6 +413,46 @@ def test_normalize_text_return_details_records_reading_rules(
     )
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "original_text", "normalized_text"),
+    [
+        # 鉄道車両の形式と車両番号は、形式記号から車両番号までを1つの区間にする
+        ("モハ205-3248", "モハ205-3248", "モハ205の三二四八"),
+        ("モハ205-3248が走る", "モハ205-3248", "モハ205の三二四八"),
+        ("クハ２０５－３００１", "クハ２０５－３００１", "クハ205の三〇〇一"),
+        # 元号に続く点区切りの和暦の年月日は、元号から日までを1つの区間にする
+        ("平成元.1.8", "平成元.1.8", "平成元年1月8日"),
+        ("大正15.4.1に", "大正15.4.1", "大正15年4月1日"),
+        ("大正１５．４．１", "大正１５．４．１", "大正15年4月1日"),
+        ("昭和 64.1.7", "昭和 64.1.7", "昭和64年1月7日"),
+    ],
+)
+def test_normalize_text_return_details_records_contextual_numbers(
+    text: str, original_text: str, normalized_text: str, for_irodori: bool
+) -> None:
+    """
+    「モハ205-3248」の車両番号や「平成元.1.8」の和暦の年月日のように、前の形式記号や元号で読み方が決まる数が、
+    形式記号や元号を含めた1つの区間として details に記録されることを確認する。
+    番号や日付だけを区間にすると、単独で変換した結果 (郵便番号の「205-3248」や、元号のない「1.8」) が全文の変換結果と食い違い、区間が記録から漏れる。
+    """
+
+    result = normalize_text(text, for_irodori=for_irodori, return_details=True)
+
+    matching_details = [
+        detail
+        for detail in result.details
+        if detail.original_text == original_text
+        and detail.normalized_text == normalized_text
+    ]
+    assert len(matching_details) == 1
+    detail = matching_details[0]
+    assert text[detail.original_start : detail.original_end] == original_text
+    assert (
+        result.text[detail.normalized_start : detail.normalized_end] == normalized_text
+    )
+
+
 @pytest.mark.parametrize(
     ("text", "expected", "expected_analysis_text"),
     [
