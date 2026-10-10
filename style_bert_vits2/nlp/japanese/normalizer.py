@@ -546,6 +546,8 @@ __DIGIT_TO_KATAKANA_SHORT_MAP: dict[str, str] = {
 }
 # 部屋番号の中間0の読み方（マル）
 __DIGIT_ZERO_MARU = "マル"
+# 3桁の部屋番号を桁読みの漢数字（309→三〇九）へ書き換える変換表
+__DIGIT_TO_KANJI_TRANSLATE_TABLE = str.maketrans("0123456789", "〇一二三四五六七八九")
 # 電話番号パターン: ハイフン区切り（先頭が 0 のみマッチ）
 # 0X-XXXX-XXXX / 0XX-XXX-XXXX / 0XXX-XX-XXXX / 0XXXX-X-XXXX / 0X0-XXXX-XXXX
 # 0120-XXX-XXX / 0800-XXX-XXXX / 0570-XXX-XXX / 050-XXXX-XXXX
@@ -613,7 +615,8 @@ __ADDRESS_STANDALONE_3PART_WITH_ROOM_PATTERN = re.compile(
     r"(?![A-Za-z0-9])"
 )
 # 「号室」パターン: 文中の「309号室」のような表記を変換
-__ROOM_NUMBER_GOUSHITSU_PATTERN = re.compile(r"(?<!\d)(\d{3,4})号室")
+## 「2の11の3の309号室」のように「の」の後の番号は建物名と区切られているので、ポーズマーカーを挿入しない
+__ROOM_NUMBER_GOUSHITSU_PATTERN = re.compile(r"(?<![\dの])(\d{3,4})号室")
 # 「号」パターン: 文脈が住所・建物であると判断できる場合のみ変換
 __ROOM_NUMBER_GOU_PATTERN = re.compile(r"(?<!\d)(\d{3,4})号(?!室)")
 # 号の文脈判定に使う「明示的な住所語彙」パターン
@@ -2699,28 +2702,24 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
 
     def convert_room_number_digits(digits: str) -> str:
         """
-        部屋番号の数字をカタカナ読みに変換する。
+        号・建物名の直後・住所の4要素目の部屋番号を、読み方が一意に決まる表記へ書き換える。
 
-        3桁の部屋番号では中間の 0 を「マル」と読む（例: 409→ヨンマルキュー）。
-        4桁以上の部屋番号では中間の 0 も「ゼロ」と読む（例: 1409→イチヨンゼロキュー）。
-        先頭・末尾の 0 は桁数に関係なく常に「ゼロ」。
-        末尾の1モーラ数字（2, 5）は伸ばさない（号室末尾ルール）。
+        カナ読みにすると MeCab の未知語になってアクセントが崩れるため、読みとアクセントはコアに任せる。
+        数字のままの3桁はコアが位取り（309→サンビャクキュー）で読むので、桁読みの漢数字（三〇九）にする。
+        号と住所の4要素目の4桁以上は位取りで読む方が短く自然なので（1205→センニヒャクゴ）、数字のまま返す。
+        建物名の直後の4桁は、呼び出し元で桁読みの漢数字にする。
 
         Args:
             digits (str): 部屋番号の数字列（3桁以上）
 
         Returns:
-            str: カタカナ読みに変換された文字列
+            str: 書き換えた部屋番号
         """
 
-        # 3桁の部屋番号のみ中間 0 をマルと読む
-        # 4桁以上の部屋番号では中間 0 もゼロと読む
-        is_use_maru = len(digits) == 3
-        return digits_to_katakana(
-            digits,
-            is_shorten_trailing=True,
-            is_use_maru_for_middle_zero=is_use_maru,
-        )
+        # 3桁の部屋番号だけを桁読みの漢数字にする
+        if len(digits) == 3:
+            return digits.translate(__DIGIT_TO_KANJI_TRANSLATE_TABLE)
+        return digits
 
     def convert_address_parts(
         part1: str,
@@ -2747,7 +2746,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         if part3 is not None:
             result += f"の{part3}"
         if part4 is not None:
-            # 4要素目が3桁以上の場合は部屋番号として桁読み
+            # 4要素目が3桁以上の場合は部屋番号として扱う
             if len(part4) >= 3:
                 result += f"の{convert_room_number_digits(part4)}"
             else:
@@ -2957,6 +2956,12 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         part3 = match.group(3)
         room_number = match.group(4)
         room_suffix = match.group(5) or ""
+        # 号室の番号は数字のまま渡し、コアに3桁は桁読み・4桁は位取りで読ませる
+        if room_suffix == "号室":
+            return (
+                f"{convert_address_parts(part1, part2, part3)}の{room_number}号室"
+                + _ADDRESS_MARKER
+            )
         return (
             convert_address_parts(
                 part1,
@@ -2974,12 +2979,11 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     )
 
     # 5b. 「号室」表記を処理する（文脈に依存せず変換）
-    # 建物名と部屋番号のカタカナ読みの間にポーズマーカー「'」を挿入する
-    # カタカナで終わる建物名（フォレストタワー等）の直後に桁読みが続くと
-    # 分かち書き境界が曖昧になり OpenJTalk のアクセント推定が不安定になるため
+    # 建物名と部屋番号の間にポーズマーカー「'」を挿入する
+    # カタカナで終わる建物名（フォレストタワー等）の直後に番号が続くと分かち書き境界が曖昧になり、OpenJTalk のアクセント推定が不安定になるため
+    ## 号室の番号は数字のまま渡し、コアに3桁は桁読み（805→ハチマルゴ）、4桁は位取り（1001→センイチ）で読ませる
     def convert_room_number_goushitsu(match: re.Match[str]) -> str:
-        digits = match.group(1)
-        return f"'{convert_room_number_digits(digits)}号室"
+        return f"'{match.group(1)}号室"
 
     text = __ROOM_NUMBER_GOUSHITSU_PATTERN.sub(convert_room_number_goushitsu, text)
 
@@ -3002,8 +3006,11 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         ## 電話番号は後段のステップ 7 で1桁ずつ読む
         if __PHONE_NO_HYPHEN_PATTERN.match(match.string, match.start(2)) is not None:
             return match.group(0)
+        # 建物名の直後の番号は、号室も号も付かないのでコアには部屋番号の文脈が伝わらない
+        ## 数字のまま渡すと4桁は「サンゼンニヒャクヨンジューハチ」と位取りで読まれるので、4桁までを桁読みの漢数字にする
         return prefix_char + "・".join(
-            f"'{convert_room_number_digits(part)}" for part in digits.split("・")
+            f"'{part.translate(__DIGIT_TO_KANJI_TRANSLATE_TABLE) if len(part) <= 4 else part}"
+            for part in digits.split("・")
         )
 
     text = __ROOM_NUMBER_IMPLICIT_PATTERN.sub(convert_room_number_implicit, text)
