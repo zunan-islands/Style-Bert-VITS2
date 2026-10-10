@@ -1133,6 +1133,15 @@ __CHEMICAL_FORMULA_PATTERN = re.compile(
 
 # =========== __convert_english_to_katakana() で使う定数・正規表現パターン ===========
 
+# 数と英字を組み合わせ、数を英語で読むか日本語で読むかが英字ごとに決まる語を検出する
+## 次元の「D」と世代の「G」は英語 (「3D」は「スリーディ＼ー」)、解像度や間取りの「K」「DK」「LK」「LDK」「SLDK」は日本語 (「4K」は「ヨンケ＼ー」) で、間取りの数が1のときだけ英語の「ワン」で読む
+## 紙の大きさの「A」「B」は日本語で平板 (「A4」は「エーヨン」) に読む
+## 「B1」「B2」「B6」はビタミンや地下の階 (「ビルB1」) の用法の方が多いので、紙の大きさに入れず英単語のカタカナ読みの経路に残す
+## 読みとアクセントはコアの辞書の行が持つ
+__CORE_DICTIONARY_ALPHANUMERIC_WORD_PATTERN = re.compile(
+    r"[1-9](?:S?LDK|DK|LK|K)|[2-4]D|[2-6]G|A(?:10|[0-9])|B(?:10|[03-579])|COVID-19"
+)
+
 __ALPHABET_PATTERN = re.compile(r"[a-zA-Z]")
 __NUMBER_PATTERN = re.compile(r"[0-9]+(\.[0-9]+)?")
 __ENGLISH_WORD_WITH_NUMBER_PATTERN = re.compile(
@@ -3763,6 +3772,11 @@ def __convert_english_to_katakana(text: str) -> str:
 
         # 事前に万が一 word の前後にスペースがあれば除去
         word = word.strip()
+
+        # 「3D」「4K」「2LDK」「A4」のように数を英語で読むか日本語で読むかが英字ごとに決まる語は、
+        # 読みとアクセントをコアの辞書の行に任せるので、カタカナにせずそのまま返す
+        if __CORE_DICTIONARY_ALPHANUMERIC_WORD_PATTERN.fullmatch(word) is not None:
+            return word
         # print(f"word: {word}")
 
         # 化学式は関数全体の前段で一括置換するが、スラッシュ区切りの再帰処理などでは

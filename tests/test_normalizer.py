@@ -10,6 +10,7 @@ import pytest
 
 from style_bert_vits2.nlp.japanese import normalizer as japanese_normalizer
 from style_bert_vits2.nlp.japanese.normalizer import (
+    __CORE_DICTIONARY_ALPHANUMERIC_WORD_PATTERN,  # pyright: ignore[reportPrivateUsage]
     __IRODORI_SYMBOL_REPLACE_MAP,  # pyright: ignore[reportPrivateUsage]
     NormalizationResult,
     normalize_text,
@@ -1113,6 +1114,92 @@ def test_normalize_text_roman_numerals_after_names(
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    "text",
+    [
+        # 数を英語で読むか日本語で読むかが付く英字ごとに決まる語は、読みとアクセントをコアの辞書の行に任せ、英字のまま渡す
+        ## 次元の「D」と世代の「G」は英語 (「スリーディ＼ー」「ファイブジ＼ー」)
+        "3Dプリンター",
+        "2Dの絵",
+        "5Gの通信",
+        "4G",
+        # 解像度や間取りの「K」「LDK」などは日本語で、1のときだけ英語の「ワン」(「ヨンケ＼ー」「ニエルディーケ＼ー」「ワンケ＼ー」)
+        "4Kテレビ",
+        "8K",
+        "2K",
+        "2LDKの部屋",
+        "1LDK",
+        "1K",
+        "3SLDK",
+        "2DK",
+        # 紙の大きさの「A」「B」は日本語で平板 (「エーヨン」「ビーゴ」)
+        "A4の紙",
+        "B5",
+        "A10",
+        "COVID-19",
+    ],
+)
+def test_normalize_text_alphanumeric_words_left_to_core_dictionary(
+    text: str, for_irodori: bool
+) -> None:
+    """
+    「3D」「5G」「4K」「2LDK」「A4」「COVID-19」のように数と英字を組み合わせた語が、英単語のカタカナ読みの表で「スリーディー」「よんケー」「にーエルディーケー」と書き換えられず、そのままコアに渡ることを確認する。
+    これらの語の読みとアクセント (「スリーディ＼ー」「ヨンケ＼ー」「エーヨン」の平板など) は、コアの辞書の行が持つ。
+    カタカナに書き換えると、コアがカタカナの語として「スリ＼ーディー」のようにアクセントを付け直してしまう。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == text
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 規則の表にない英字と数字の組み合わせは、従来どおり英単語のカタカナ読みの表で読む
+        ("3DS", "スリーディーエス"),
+        ("H2O", "エイチツーオー"),
+        # 「BS4K」は「BS」と「4K」に分けて読み、「4K」はコアの辞書の行に任せる
+        ("BS4K", "ビーエス4K"),
+    ],
+)
+def test_normalize_text_alphanumeric_words_outside_rule_table(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    数と英字の組み合わせの規則の表にない「3DS」「H2O」は、従来どおり英単語のカタカナ読みの表で読むことを確認する。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize(
+    ("word", "is_paper_size"),
+    [
+        # ビタミンの「B1」「B2」「B6」や地下の階の「ビルB1」の用法の方が多いので、紙の大きさの規則の表に入れない
+        ("B1", False),
+        ("B2", False),
+        ("B6", False),
+        # それ以外の紙の大きさは、規則の表に入れてコアの辞書の行に任せる
+        ("B0", True),
+        ("B4", True),
+        ("B5", True),
+        ("A4", True),
+    ],
+)
+def test_normalize_text_paper_size_rule_excludes_vitamin_and_basement_b(
+    word: str, is_paper_size: bool
+) -> None:
+    """
+    「ビタミンB1」「ビルB1」の「B1」が紙の大きさとして「ビーイチ」と平板で読まれないよう、コアの辞書の行に任せる語に入れないことを確認する。
+    「B1」「B2」「B6」はビタミンや地下の階の用法の方が多いので、従来どおり英単語のカタカナ読みの経路で扱う。
+    """
+
+    assert (
+        __CORE_DICTIONARY_ALPHANUMERIC_WORD_PATTERN.fullmatch(word) is not None
+    ) is is_paper_size
 
 
 @pytest.mark.parametrize("for_irodori", [False, True])
@@ -6522,7 +6609,7 @@ def test_normalize_text_complex():
         normalize_text(
             "ROCK5 is a series of Rockchip RK3588(s) based SBC(Single Board Computer) by Radxa. It can run Linux, Android, BSD and other distributions. ROCK5 comes in two models, Model A and Model B. Both models offer 4GB, 8GB, 16GB and 32GB options. For detailed difference between Model A and Model B, please check Specifications. ROCK5 features a Octa core ARM processor(4x Cortex-A76 + 4x Cortex-A55), 64bit 3200Mb/s LPDDR4, up to 8K@60 HDMI, MIPI DSI, MIPI CSI, 3.5mm jack with mic, USB Port, 2.5 GbE LAN, PCIe 3.0, PCIe 2.0, 40-pin color expansion header, RTC. Also, ROCK5 supports USB PD and QC powering."
         )
-        == "ロックファイブイズアシリーズオブロックチップRK3588's'ベースドエスビーシー'シングルボードコンピューター'バイラダ.イットキャンランリナックス,アンドロイド,ビーエスディーアンドアザーディストリビューションズ.ロックファイブカムズインツーモデルズ,モデルAアンドモデルB.ボスモデルズオファー4ギガバイト,8ギガバイト,16ギガバイトアンド32ギガバイトオプションズ.フォーディテールズディファレンスビトゥイーンモデルAアンドモデルB,プリーズチェックスペシフィケーションズ.ロックファイブフィーチャーズアオクタコアアームプロセッサー'4xコーテックスA76プラス4xコーテックスA55',64ビット3200メガビット毎秒エルピーディーディーアールフォー,アップトゥーはちケー@60エイチディーエムアイ,ミピーディーエスアイ,ミピーシーエスアイ,3.5ミリメートルジャックウィズマイク,ユーエスビーポート,2.5ジービーイーラン,ピーシーアイイー3.0,ピーシーアイイー2.0,40ピンカラーエクスパンションヘッダー,アールティーシー.オルソ,ロックファイブサポーツユーエスビーピーディーアンドキューシーパワーリング."
+        == "ロックファイブイズアシリーズオブロックチップRK3588's'ベースドエスビーシー'シングルボードコンピューター'バイラダ.イットキャンランリナックス,アンドロイド,ビーエスディーアンドアザーディストリビューションズ.ロックファイブカムズインツーモデルズ,モデルAアンドモデルB.ボスモデルズオファー4ギガバイト,8ギガバイト,16ギガバイトアンド32ギガバイトオプションズ.フォーディテールズディファレンスビトゥイーンモデルAアンドモデルB,プリーズチェックスペシフィケーションズ.ロックファイブフィーチャーズアオクタコアアームプロセッサー'4xコーテックスA76プラス4xコーテックスA55',64ビット3200メガビット毎秒エルピーディーディーアールフォー,アップトゥー8K@60エイチディーエムアイ,ミピーディーエスアイ,ミピーシーエスアイ,3.5ミリメートルジャックウィズマイク,ユーエスビーポート,2.5ジービーイーラン,ピーシーアイイー3.0,ピーシーアイイー2.0,40ピンカラーエクスパンションヘッダー,アールティーシー.オルソ,ロックファイブサポーツユーエスビーピーディーアンドキューシーパワーリング."
     )
 
 
@@ -6635,7 +6722,7 @@ def test_normalize_text_complex():
         ),
         (
             "4K/60fps対応カメラを2台、予算¥198,000以内で比較検討中。",
-            "よんケー/60エフピーエス対応カメラを2台,予算198000円以内で比較検討中.",
+            "4K/60エフピーエス対応カメラを2台,予算198000円以内で比較検討中.",
         ),
         (
             "受付は午前8時30分から、最終入場は18:15、駐車場は第2-第4区画を利用してください。",
