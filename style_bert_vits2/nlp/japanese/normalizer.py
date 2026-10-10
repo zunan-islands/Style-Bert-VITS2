@@ -224,6 +224,11 @@ __NUMBER_MULTIPLICATION_PATTERN = re.compile(
 )
 __NUMBER_COMPARISON_PATTERN = re.compile(r"(\d+)\s*([<＜>＞])\s*(\d+)")
 __WAREKI_PATTERN = re.compile(r"([RHS])(\d{1,2})\.(\d{1,2})\.(\d{1,2})")
+# 元号に続けて点で区切った和暦の年月日 (「大正15.4.1」「平成元.1.8」) を検出する
+## 2桁の年を西暦に広げる「98.04.11」の日付や、「6.5.1」の版番号として扱われる前に読む
+__ERA_DOTTED_DATE_PATTERN = re.compile(
+    r"(明治|大正|昭和|平成|令和)[ \u3000]?(\d{1,2}|元)\.(\d{1,2})\.(\d{1,2})(?![\d.])"
+)
 __DATE_EXPAND_PATTERN = re.compile(r"\d{2}[-/\.]\d{1,2}[-/\.]\d{1,2}")
 # 「2/2.5G」のように直後に小数点と数字が続くものは、小数の一部なので日付にしない
 __DATE_PATTERN = re.compile(
@@ -2498,6 +2503,16 @@ def __replace_symbols(text: str) -> str:
     # 和暦の省略表記のパターン
     # R6.1.1, H31.4.30, S64.1.7 などにマッチ
     text = __WAREKI_PATTERN.sub(convert_wareki, text)
+
+    # 元号に続く「15.4.1」は和暦の年月日なので、2桁の年を西暦に広げずに「大正15年4月1日」と書く
+    text = __ERA_DOTTED_DATE_PATTERN.sub(
+        lambda m: (
+            f"{m.group(1)}{m.group(2)}年{int(m.group(3))}月{int(m.group(4))}日"
+            if 1 <= int(m.group(3)) <= 12 and 1 <= int(m.group(4)) <= 31
+            else m.group(0)
+        ),
+        text,
+    )
 
     # 「½」のような分数の文字は日付と紛れないので、「二ぶんの一」と分数で書き、前の整数とは「と」でつなぐ
     ## NFKC は「½」を分数の斜線の「1⁄2」にするので、そのままでは後段で「1'2」と区切られる

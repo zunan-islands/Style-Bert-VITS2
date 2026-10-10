@@ -2575,6 +2575,31 @@ def test_normalize_text_dates():
 @pytest.mark.parametrize(
     ("text", "expected", "expected_irodori"),
     [
+        # 元号に続く「15.4.1」は和暦の年月日なので、2桁の年を西暦の「2015年」に広げない
+        ("大正15.4.1", "大正15年4月1日", "大正15年4月1日"),
+        ("昭和64.1.7に", "昭和64年1月7日に", "昭和64年1月7日に"),
+        ("平成元.1.8", "平成元年1月8日", "平成元年1月8日"),
+        ("令和6.5.1", "令和6年5月1日", "令和6年5月1日"),
+        ("大正１５．４．１", "大正15年4月1日", "大正15年4月1日"),
+        # 元号のない「98.04.11」は、従来どおり2桁の年を西暦に広げる
+        ("98.04.11", "1998年4月11日", "1998年4月11日"),
+    ],
+)
+def test_normalize_text_era_dotted_dates(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「大正15.4.1」のように元号の後に点で区切った年月日が、年を西暦の「2015年」と取り違えずに「大正15年4月1日」と読まれることを確認する。
+    「令和6.5.1」のように年が1桁でも、版番号の「6点5点1」ではなく和暦の日付にする。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
         # 小数点の後の「01秒」は月日や時刻のゼロ埋めではないので、0を落とさない
         ("0.01秒差で負けた", "0.01秒差で負けた", "零点零一秒差で負けた"),
         ("9.05秒", "9.05秒", "九点零五秒"),
