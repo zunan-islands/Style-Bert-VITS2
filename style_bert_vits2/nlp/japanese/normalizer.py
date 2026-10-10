@@ -298,6 +298,16 @@ __CROSS_MARK_AS_KAKERU_PATTERN = re.compile(
 )
 # 上記パターンに該当しなかった残りの × 系文字を「バツ」に変換するパターン
 __CROSS_MARK_AS_BATSU_PATTERN = re.compile(r"[×✖⨯❌][\ufe0e\ufe0f]?")
+# 装飾として並べた「+」を検出する
+## 英字や数字に挟まれていない2つ以上の「++」(見出しの前後の「＋＋お知らせ＋＋」) と、空白を除いて語・括弧・「/」に挟まれていない1つの「+」(「★＋☆」「…＋」) が対象
+## 「C++」「Notepad++」の英字の後の「++」、「(++i)」の英字や数字の前の「++」と、「Streaming+」「これ＋これ」「5 + 8」「+1」「「Alt」＋「F4」」「モカ/＋」のように語や括弧に付く「+」は「プラス」と読む
+## 「「＋」キー」のように括弧の組で囲んだ1つの「+」は記号そのものを指すので「プラス」と読み、顔文字の「（＋＿＋）」は装飾として除く
+__DECORATIVE_PLUS_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9+])\+{2,}(?![A-Za-z0-9])"
+    r"|(?!(?<=[(\[「『【《〈])[ \u3000]*\+[ \u3000]*[)\]」』】》〉])"
+    r"(?<![A-Za-z0-9ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々Α-Ωα-ω+ \u3000)\]」』】》〉/])[ \u3000]*\+[ \u3000]*"
+    r"(?![A-Za-z0-9ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々Α-Ωα-ω+ \u3000(\[「『【《〈/])"
+)
 
 # 記号などの読み正規化マップ
 # 一度リストアップしたがユースケース上不要と判断した記号はコメントアウトされている
@@ -2661,6 +2671,9 @@ def __replace_symbols(text: str) -> str:
     # __SYMBOL_YOMI_MAP による一律置換の前に実行する（× 系文字は __SYMBOL_YOMI_MAP に含まれない）
     text = __CROSS_MARK_AS_KAKERU_PATTERN.sub("かける", text)
     text = __CROSS_MARK_AS_BATSU_PATTERN.sub("バツ", text)
+
+    # 見出しの前後の「＋＋」や記号に挟まれた「＋」は装飾なので、「プラス」と読まずに除く
+    text = __DECORATIVE_PLUS_PATTERN.sub("", text)
 
     # 記号類を辞書で置換
     text = __SYMBOL_YOMI_PATTERN.sub(lambda x: __SYMBOL_YOMI_MAP[x.group()], text)
