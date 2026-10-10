@@ -5678,6 +5678,14 @@ def test_normalize_text_black_and_white_circled_numbers(
         ("➀➁➂➃➄➅➆➇➈➉", "12345678910"),
         ("①1回", "1,1回"),
         ("12③", "12,3"),
+        # 丸数字の直後の漢字やカタカナの語は、数に付く助数詞ではなく項目の中身なので、読点で区切る
+        ("②薬を飲む", "2,薬を飲む"),
+        ("③報告", "3,報告"),
+        ("①社内調査", "1,社内調査"),
+        ("②一賃金", "2,一賃金"),
+        ("④テスト", "4,テスト"),
+        # 丸数字の後の助詞は項目の番号を受けるので、区切らない
+        ("②と③を加えて", "2と3を加えて"),
     ],
 )
 def test_normalize_text_circled_number_non_targets(
@@ -5685,6 +5693,7 @@ def test_normalize_text_circled_number_non_targets(
 ) -> None:
     """
     同種の丸数字が連続する場合や、数字に隣接する読点の区切り方が意図通りに保持されることを確認する。
+    「②薬」のように丸数字の直後に漢字やカタカナの語が続くと、コアが「2薬」を数と助数詞の「ニヤク」と読むので、読点で区切る。
     """
 
     if for_irodori is True:
@@ -5707,7 +5716,7 @@ def test_normalize_text_enclosed_characters():
     assert normalize_text("➊➋➌➍➎➏➐➑➒➓") == "12345678910"
     # 英単語直後の装飾付き数字を Python の int() へ直接渡さず、先に ASCII 数字へ直す
     assert normalize_text("Chapter❻", for_irodori=True) == "チャプターシックス"
-    assert normalize_text("❻今後の課題", for_irodori=True) == "6今後の課題"
+    assert normalize_text("❻今後の課題", for_irodori=True) == "6、今後の課題"
     # 囲み文字（漢字）
     assert normalize_text("㈱") == "株式会社"
     assert normalize_text("㈲") == "有限会社"
@@ -6349,7 +6358,7 @@ def test_normalize_text_mixed_scripts():
     # 記号との混在
     assert normalize_text("漢字+カタカナ=混在!?") == "漢字プラスカタカナイコール混在!?"
     # 特殊文字との混在
-    assert normalize_text("①漢字②ひらがな③カタカナ") == "1漢字2ひらがな3カタカナ"
+    assert normalize_text("①漢字②ひらがな③カタカナ") == "1,漢字2ひらがな3,カタカナ"
     # 単位との混在
     assert (
         normalize_text("漢字100kg+カタカナ500m")
