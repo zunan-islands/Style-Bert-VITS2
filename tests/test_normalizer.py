@@ -384,6 +384,7 @@ def test_normalize_text_return_details_omits_unmodified_or_non_target_ranges(
         ("それは1ctです", "1ct", "1カラット"),
         ("Ver.2.0を公開", "Ver.2.0", "バージョン二ー点零"),
         ("v1.2.3", "v1.2.3", "ブイ一点二点三"),
+        ("参加者は1、000名", "1、000名", "1000名"),
     ],
 )
 def test_normalize_text_return_details_records_reading_rules(
@@ -5199,6 +5200,13 @@ def test_normalize_text_currency():
     assert normalize_text("100¥") == "100円"
     # 金額の桁区切り
     assert normalize_text("¥1,234,567") == "1234567円"
+    # 読点を桁区切りに使った「1、000名」も、単位や助数詞が続くときは桁区切りとして除き、「千名」と読ませる
+    assert normalize_text("参加者は1、000名") == "参加者は1000名"
+    assert normalize_text("29、002フィート") == "29002フィート"
+    assert normalize_text("12、345人") == "12345人"
+    # 単位や助数詞が続かない「1、2、3」「2、000」は、数の並びなので読点のまま残す
+    assert normalize_text("1、2、3") == "1,2,3"
+    assert normalize_text("2、000") == "2,000"
     assert normalize_text("$1,234.56") == "1234.56ドル"
     # 通貨の単位
     assert normalize_text("1億円") == "1億円"

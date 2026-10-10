@@ -994,6 +994,11 @@ __PAGE_UNIT_PATTERN = re.compile(
 )
 # 数字の区切りとしてのカンマを削除するためのパターン
 __NUMBER_WITH_SEPARATOR_PATTERN = re.compile("[0-9]{1,3}(,[0-9]{3})+")
+# 読点を桁区切りに使った数 (「1、000名」「29、002フィート」) を検出する
+## 「1、2、3」のような数の並びと分けるため、3桁ずつの組の後に単位や助数詞の漢字・カタカナが続くものだけを対象にする
+__NUMBER_WITH_JAPANESE_COMMA_SEPARATOR_PATTERN = re.compile(
+    r"(?<![0-9、])[0-9]{1,3}(?:、[0-9]{3})+(?=[\u30a1-\u30fa\u3400-\u4dbf\u4e00-\u9fff々])"
+)
 # 通貨記号→カタカナ読みのマッピング
 __CURRENCY_MAP = {
     "$": "ドル",
@@ -2001,6 +2006,11 @@ def __collect_normalization_details(
                 candidates.append(
                     (match.start(), match.end() + number.end(), "number", 36)
                 )
+
+    # 読点の桁区切りを除いた「1、000名」は、桁区切りを判定する手がかりの助数詞まで含めて1つの区間にする
+    ## 数だけを再変換すると助数詞がないので桁区切りと判定されず、表記が変わらない区間として記録から漏れる
+    for match in __NUMBER_WITH_JAPANESE_COMMA_SEPARATOR_PATTERN.finditer(search_text):
+        candidates.append((match.start(), match.end() + 1, "number", 26))
 
     # 数値と百分率記号は一つの発話内容になるため、数値部分を分割しない
     candidates.extend(
@@ -3592,6 +3602,10 @@ def __convert_numbers_to_words(text: str) -> str:
 
     # 12,300 のような数字の区切りとしてのカンマを削除
     res = __NUMBER_WITH_SEPARATOR_PATTERN.sub(lambda m: m[0].replace(",", ""), res)
+    # 読点を桁区切りに使った「1、000名」も、桁区切りを除いて1つの数にする
+    res = __NUMBER_WITH_JAPANESE_COMMA_SEPARATOR_PATTERN.sub(
+        lambda m: m[0].replace("、", ""), res
+    )
 
     # 通貨の変換
     res = __CURRENCY_PATTERN.sub(
