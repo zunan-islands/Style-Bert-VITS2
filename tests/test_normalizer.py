@@ -3732,6 +3732,32 @@ def test_normalize_text_room_numbers_are_left_to_core_reading(
     assert normalize_text(text, for_irodori=True) == expected_irodori
 
 
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 鉄道車両の「形式-番号」は、形式を位取り、ハイフンを「の」、車両番号を桁読みで読む
+        ("モハ205-3248が走る", "モハ205の三二四八が走る", "モハ205の三二四八が走る"),
+        ("クハ211-3001", "クハ211の三〇〇一", "クハ211の三〇〇一"),
+        ("キハ40-2001", "キハ40の二〇〇一", "キハ40の二〇〇一"),
+        # 形式だけのときも、建物名の後の部屋番号と取り違えずに位取りで読む
+        ("モハ205の車内", "モハ205の車内", "モハ205の車内"),
+        # 車両の形式でないカタカナの後の番号は、従来どおり部屋番号として扱う
+        ("石田ハイツ101", "石田ハイツ'一〇一", "石田ハイツ'一〇一"),
+    ],
+)
+def test_normalize_text_railway_car_numbers(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「モハ205-3248」のような鉄道車両の形式と車両番号が、郵便番号の「ニーマルゴーのサンニーヨンハチ」や部屋番号の「二〇五」と読まれず、
+    「モハニヒャクゴノサンニーヨンハチ」と読まれる書き方になることを確認する。
+    形式番号は位取り、車両番号は桁読みで読むことが多い。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
 def test_normalize_text_room_number_digit_patterns():
     """
     住所の4要素目や建物名の後の部屋番号が、桁数と接尾辞に応じて読み方の決まる表記へ正規化されることを確認する。

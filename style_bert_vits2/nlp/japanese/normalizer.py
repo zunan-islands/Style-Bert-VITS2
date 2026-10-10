@@ -813,6 +813,14 @@ __BUILDING_NAME_PATTERN = re.compile(
 # 漢字の直後は除外する（「西暦2024」「漢字100kg」のような誤マッチを防ぐ）
 # 中黒「・」はカタカナのブロックにあるが語の区切りなので、「東京・2024年」の数字を部屋番号として読まないよう除外する
 ## 「石田ハイツ101・102」のように部屋番号を中黒で並べた列挙は、建物名に続く1つのまとまりとして扱う
+# 鉄道車両の形式記号 (「モハ」「クハ」「キハ」「クモハ」「スハネフ」) を検出する
+## 車両の種類を表す「ク」「モ」「サ」「キ」や重さの「オ」「ス」「マ」「カ」「ナ」と、等級や設備の「ハ」「ロ」「ネ」「シ」「フ」などを組み合わせた記号
+__RAILWAY_CAR_TYPE = r"(?<![ァ-ヴー])[クモサキオスマカナ]{0,2}[ハロネシユニフ]{1,3}"
+# 鉄道車両の「形式-車両番号」(「モハ205-3248」) を検出する
+## 郵便番号の「3桁-4桁」と同じ形なので、郵便番号の処理より先に読む
+__RAILWAY_CAR_NUMBER_PATTERN = re.compile(
+    r"(" + __RAILWAY_CAR_TYPE + r")(\d{1,4})-(\d{3,4})(?![\d-])"
+)
 __ROOM_NUMBER_IMPLICIT_PATTERN = re.compile(
     r"([\u30A1-\u30FA\u30FC-\u30FF])"  # カタカナのみ（建物名末尾）
     r"(\d{3,}(?:・\d{3,})*)"  # 3桁以上の数字（部屋番号）と、中黒で並べた部屋番号
@@ -3299,6 +3307,16 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     ):
         text = text.replace(hyphen_variant, "-")
 
+    # 鉄道車両の「モハ205-3248」は、形式を位取り、ハイフンを「の」、車両番号を桁読みの漢数字で書く
+    ## 郵便番号と同じ「3桁-4桁」の形なので、郵便番号の処理より先に書き換える
+    text = __RAILWAY_CAR_NUMBER_PATTERN.sub(
+        lambda m: (
+            f"{m.group(1)}{m.group(2)}の"
+            + m.group(3).translate(__DIGIT_TO_KANJI_TRANSLATE_TABLE)
+        ),
+        text,
+    )
+
     # 1. 〒 付き郵便番号を先に処理する
     # 〒 が __SYMBOL_YOMI_MAP で「郵便番号」に変換される前に処理する必要がある
     def convert_postal_with_symbol(match: re.Match[str]) -> str:
@@ -3421,6 +3439,12 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     def convert_room_number_implicit(match: re.Match[str]) -> str:
         prefix_char = match.group(1)  # カタカナ
         digits = match.group(2)  # 3桁以上の数字 (中黒で並べた部屋番号を含む)
+        # 「モハ205」のように鉄道車両の形式記号に続く番号は、部屋番号ではなく形式番号なので位取りのまま読む
+        if (
+            re.search(__RAILWAY_CAR_TYPE + r"\Z", match.string[: match.start(2)])
+            is not None
+        ):
+            return match.group(0)
         # 「ミズノ0120・320799」のように、カタカナの社名に続く番号が電話番号として成り立つなら部屋番号にしない
         ## 電話番号は後段のステップ 7 で1桁ずつ読む
         if __PHONE_NO_HYPHEN_PATTERN.match(match.string, match.start(2)) is not None:
