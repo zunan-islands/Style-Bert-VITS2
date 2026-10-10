@@ -2,6 +2,7 @@ import re
 import sys
 import unicodedata
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Literal, TypeAlias, overload
 
 from e2k import C2K, NGram
@@ -268,7 +269,13 @@ __POWER_PATTERN = re.compile(
     r"(?P<base>[A-Za-z]+|\d+(?:\.\d+)?)?\s*\^\s*"
     r"(?P<sign>[+\-−－ー]?)(?P<exponent>\d+)"
 )
-__EXPONENT_PATTERN = re.compile(r"(\d+(?:\.\d+)?)[eE]([-+]?\d+)")
+# 「6.02e23」のような指数表記を検出する
+## 「ξ1e1」「x1e1」のように英字やギリシャ文字に続く数字はベクトルの添字や識別子なので、指数として扱わない
+__EXPONENT_PATTERN = re.compile(r"(?<![A-Za-zΑ-Ωα-ω\d.])(\d+(?:\.\d+)?)[eE]([-+]?\d+)")
+# 指数表記を展開した小数部を、num2words と同じ「零点零一」の書き方の漢数字にする
+__EXPONENT_FRACTION_DIGIT_TRANSLATE_TABLE = str.maketrans(
+    "0123456789", "零一二三四五六七八九"
+)
 
 # × 系文字（×, ✖, ⨯, ❌）の文脈依存読み分けパターン
 # 両側が漢字・カタカナ・数字・アルファベットの場合は「かける」と読む
@@ -2403,13 +2410,27 @@ def __replace_symbols(text: str) -> str:
     text = __POWER_PATTERN.sub(convert_power, text)
 
     # 指数表記の処理
-    ## 稀にランダムな英数字 ID にマッチしたことで OverflowError が発生するが、続行に支障はないため無視する
-    try:
-        text = __EXPONENT_PATTERN.sub(
-            lambda m: f"{num2words(float(m.group(0)), lang='ja')}", text
-        )
-    except OverflowError:
-        pass
+    ## 浮動小数点では「6.02e23」が「六千十九垓九千九百九十九京…」と誤差の桁を含むので、10進数のまま展開する
+    ## num2words は小数を float に戻してから読むので、小数部は Decimal の数字列から直接作る
+    def convert_exponent(match: re.Match[str]) -> str:
+        try:
+            value = Decimal(match.group(0))
+        except InvalidOperation:
+            return match.group(0)
+        # 稀にランダムな英数字 ID のような桁の大きすぎる表記にマッチするので、その一致だけを残す
+        ## num2words が読めるのは10の51乗未満までで、小さすぎる数は「零」が長く並ぶだけなので、同じ桁数で打ち切る
+        if not -50 <= value.adjusted() <= 50:
+            return match.group(0)
+        integer_part, _, fraction_part = format(value, "f").partition(".")
+        fraction_part = fraction_part.rstrip("0")
+        words = str(num2words(int(integer_part), lang="ja"))
+        if fraction_part:
+            words += "点" + fraction_part.translate(
+                __EXPONENT_FRACTION_DIGIT_TRANSLATE_TABLE
+            )
+        return words
+
+    text = __EXPONENT_PATTERN.sub(convert_exponent, text)
 
     # 電話番号・郵便番号・住所・フロア表記の正規化
     ## 日付・数式・分数などの処理の後に実行する（それらが優先されるため）
