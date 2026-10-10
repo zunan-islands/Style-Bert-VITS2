@@ -3304,6 +3304,43 @@ def test_normalize_text_dotted_and_parenthesized_phone_numbers(
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 英字の見出しと空白の後の電話番号も、組をつなぐハイフンを残す
+        ("TEL 03-1234-5678", "テル03-1234-5678"),
+        ("FAX 06-9876-5432", "ファックス06-9876-5432"),
+        ("Tel 03-1234-5678", "テル03-1234-5678"),
+        ("Phone 03-1234-5678", "フォン03-1234-5678"),
+        ("TEL 03・1234・5678", "テル03-1234-5678"),
+        ("TEL 0120-123-456", "テル0120-123-456"),
+        ("TEL 090-1234-5678", "テル090-1234-5678"),
+        # 1文に見出しと番号の組が2つあっても、どちらの番号も組を保つ
+        (
+            "Fax 03-1234-5678 TEL 03-1234-5679",
+            "ファックス03-1234-5678,テル03-1234-5679",
+        ),
+        ("〒100-0001 TEL 03-1234-5678", "郵便番号100-0001,テル03-1234-5678"),
+        # 空白のない「TEL03-1234-5678」と、コロンで区切った見出しは従来どおり
+        ("TEL03-1234-5678", "テル03-1234-5678"),
+        ("TEL:03-1234-5678", "テル,03-1234-5678"),
+    ],
+)
+def test_normalize_text_phone_numbers_after_english_words(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「TEL 03-1234-5678」のように英字の見出しの後に空白を挟んで書いた電話番号が、
+    英単語のカタカナ変換で「TEL 03」と1つの語にまとめられて組のハイフンを失い、「テル0312345678」と1つの数としてコアに渡されないことを確認する。
+    組のハイフンが残れば、コアが1桁ずつの読みと組の間の休止を付ける。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 def test_normalize_text_postal_codes():
     """
     「〒」記号や「3 桁-4 桁」の郵便番号表記が、カタカナに書き換えられず、「郵便番号」の見出しと数字の組をハイフンでつないだ形でコアに渡されることを確認する。

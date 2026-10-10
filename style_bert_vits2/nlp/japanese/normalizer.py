@@ -646,7 +646,8 @@ __KANJI_DECIMAL_PATTERN = re.compile(
 )
 
 # 電話番号・郵便番号の組を区切る記号の仮置き
-## 番号の組をハイフンでつないで NJD に読ませるが、同じ関数の後段の住所や郵便番号の処理が「03-1234」を番地や郵便番号と取り違えないよう、関数を抜けるまでは私用領域の文字で区切る
+## 番号の組をハイフンでつないで NJD に読ませるが、同じ関数の後段の住所や郵便番号の処理が「03-1234」を番地や郵便番号と取り違えないよう、私用領域の文字で区切る
+## 「TEL 03-1234-5678」の「TEL 03」を英単語の変換が1つの語にまとめてハイフンを消さないよう、英単語の変換を終えるまで仮置きのまま残す
 __NUMBER_GROUP_SEPARATOR_PLACEHOLDER = "\ue000"
 # 3桁の部屋番号を桁読みの漢数字（309→三〇九）へ書き換える変換表
 __DIGIT_TO_KANJI_TRANSLATE_TABLE = str.maketrans("0123456789", "〇一二三四五六七八九")
@@ -1744,6 +1745,9 @@ def normalize_text(
 
     # 「unit　3」で保持した U+2060 を英単語変換後に半角空白へ戻し、「ユニット3」と読む
     res = res.replace("\u2060", " ")
+
+    # 英単語の変換から守った電話番号・郵便番号の組の区切りを、コアが読むハイフンに戻す
+    res = res.replace(__NUMBER_GROUP_SEPARATOR_PLACEHOLDER, "-")
 
     res = __convert_numbers_to_words(res)  # 「100円」→「百円」等
 
@@ -3414,8 +3418,6 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     )
     text = text.replace(_MARKER, "")
     text = text.replace(_ADDRESS_MARKER, "")
-    # 電話番号・郵便番号の組の区切りを、後段とコアが読むハイフンに戻す
-    text = text.replace(__NUMBER_GROUP_SEPARATOR_PLACEHOLDER, "-")
 
     return text
 
