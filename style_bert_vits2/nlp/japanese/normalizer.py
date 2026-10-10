@@ -927,6 +927,20 @@ __CURRENCY_MAP = {
 __CURRENCY_PATTERN = re.compile(
     r"([$¥€£₩₹₽₺฿₱₴₫₪₦₡₿﷼₠₢₣₤₥₧₨₭₮₯₰₲₳₵₶₷₸₻₼₾])([0-9.]*[0-9])|([0-9.]*[0-9])([$¥€£₩₹₽₺฿₱₴₫₪₦₡₿﷼₠₢₣₤₥₧₨₭₮₯₰₲₳₵₶₷₸₻₼₾])"
 )
+# 波ダッシュを長音にするとカタカナの語になるかを確かめるための、知っているカタカナの語
+## 「スーパ〜マーケット」「スパ〜クリングワイン」の語中の伸ばしを、「パリ〜ロンドン」の語の範囲と見分けるのに使う
+## 英単語のカタカナ読みの表の読みには、外来語のカタカナ表記が網羅的に入っている
+__KATAKANA_WORDS = frozenset(KATAKANA_MAP.values())
+# 漢字やカタカナの語どうしをつなぐ波ダッシュ (「パリ〜ロンドン」「東京〜大阪間」「天使の歌声〜小児病棟」) を検出する
+## 前は漢字か2文字以上のカタカナ (小書きのかなで終わる「キャ〜」は除く)、後ろは漢字かカタカナとし、「ダ〜メ」「ルネサ〜ンス」「ボ〜ッと」の伸ばしは長音として残す
+## 後ろの語が「間」で終わる「東京〜大阪間」は、interval に「間」までの語が入る
+## 全角の「～」は前段で半角の「~」に変換されるため、両方を照合する
+__WORD_RANGE_WAVE_DASH_PATTERN = re.compile(
+    r"(?:(?<=[\u3400-\u4DBF\u4E00-\u9FFF々〆ヶ])|(?<=[ァ-ヴー]{2})(?<![ァィゥェォャュョッヮ]))"
+    r"[〜~]"
+    r"(?=[\u3400-\u4DBF\u4E00-\u9FFF々]|(?![ァィゥェォャュョッヮンー])[ァ-ヴ])"
+    r"(?=(?P<interval>[\u3400-\u4DBF\u4E00-\u9FFF々ァ-ヴー]*間(?![\u3400-\u4DBF\u4E00-\u9FFF々]))?)"
+)
 # 終点が省略された範囲の波ダッシュと、その直後の区切りを照合する
 __OPEN_ENDED_RANGE_SUFFIX_PATTERN = re.compile(
     r"\s*[〜~～](?=$|[\s、。,.!?！？:;…‥）)」』】〕\]}〉》”’'\"])"
@@ -1577,6 +1591,27 @@ def normalize_text(
     ## 直後に助詞が続く波ダッシュは残し、後段で長音として扱う
     res = __OPEN_ENDED_NUMBER_RANGE_PATTERN.sub(r"\1から", res)
 
+    # 「スーパ〜マーケット」のように、波ダッシュを長音にすると知っているカタカナの語になるものは語中の伸ばしなので、先に長音にする
+    ## 前の語の終わりの2文字以上と、後ろの語の始まりの2文字以上を「ー」でつないだ並びが、知っている語に一致するかを調べる
+    ## 後ろを1文字にすると、「パリ〜ロンドン」の「パリーロ」のような短い英単語の読みに当たってしまう
+    def convert_katakana_long_vowel_wave_dash(match: re.Match[str]) -> str:
+        katakana_before = re.search(r"[ァ-ヴー]+\Z", match.string[: match.start()])
+        katakana_after = re.match(r"[ァ-ヴー]+", match.string[match.end() :])
+        if (
+            katakana_before is not None
+            and katakana_after is not None
+            and any(
+                katakana_before.group()[start:] + "ー" + katakana_after.group()[:end]
+                in __KATAKANA_WORDS
+                for start in range(len(katakana_before.group()) - 1)
+                for end in range(2, len(katakana_after.group()) + 1)
+            )
+        ):
+            return "ー"
+        return match.group()
+
+    res = __WORD_RANGE_WAVE_DASH_PATTERN.sub(convert_katakana_long_vowel_wave_dash, res)
+
     # Irodori-TTS 向けの小数は漢数字へ展開し、英語読みと句点の解釈揺れを防ぐ
     if for_irodori is True:
 
@@ -1603,6 +1638,12 @@ def normalize_text(
             res,
         )
         res = __IRODORI_DECIMAL_PATTERN.sub(convert_irodori_decimal, res)
+
+    # 漢字やカタカナの語どうしをつなぐ波ダッシュは、語の範囲や副題の区切りなので、長音にせず休止にする
+    ## 「東京〜大阪間」のように「間」が続く範囲は、1つの句としてつなげて読む
+    res = __WORD_RANGE_WAVE_DASH_PATTERN.sub(
+        lambda m: "" if m.group("interval") is not None else "、", res
+    )
 
     # 「～」と「〜」と「~」も長音記号として扱う
     res = res.replace("~", "ー")
