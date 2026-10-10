@@ -986,6 +986,9 @@ __NUMBER_WITH_SEPARATOR_PATTERN = re.compile("[0-9]{1,3}(,[0-9]{3})+")
 __NUMBER_WITH_JAPANESE_COMMA_SEPARATOR_PATTERN = re.compile(
     r"(?<![0-9、])[0-9]{1,3}(?:、[0-9]{3})+(?=[\u30a1-\u30fa\u3400-\u4dbf\u4e00-\u9fff々])"
 )
+# 数が連結しないよう正規化が数の前に足した読点の仮置き
+## 「①100円」の「1、100円」が上の桁区切りと取り違えられて「1100円」にならないよう、桁区切りを除くまでは私用領域の文字で区切る
+__ADDED_COMMA_BEFORE_DIGIT_PLACEHOLDER = "\ue001"
 # 通貨記号→カタカナ読みのマッピング
 __CURRENCY_MAP = {
     "$": "ドル",
@@ -1594,7 +1597,7 @@ def normalize_text(
     ## 数字間の「'」による区切りは、Irodori-TTS 向けの経路で1文に2つあると鉤括弧の組に変わるので使わない
     text = re.sub(
         r"([\u2460-\u24ff\u2776-\u2793\u3251-\u325f\u32b1-\u32bf])(?=[0-9])",
-        r"\1、",
+        r"\1" + __ADDED_COMMA_BEFORE_DIGIT_PLACEHOLDER,
         text,
     )
     # 「②薬」「③報告」の丸数字の直後の漢字やカタカナの語は項目の中身なので、読点で区切り、コアに「ニヤク」と助数詞で読ませない
@@ -1614,7 +1617,7 @@ def normalize_text(
         r"(?<=[0-9〇一二三四五六七八九十百千万])(?=[\u2460-\u24ff\u2776-\u2793\u3251-\u325f\u32b1-\u32bf])"
         r"|(?<=[❶-❿⓫-⓴➊-➓])(?=[①-⑳➀-➉㉑-㉟㊱-㊿])"
         r"|(?<=[①-⑳➀-➉㉑-㉟㊱-㊿])(?=[❶-❿⓫-⓴➊-➓])",
-        "、",
+        __ADDED_COMMA_BEFORE_DIGIT_PLACEHOLDER,
         text,
     )
 
@@ -1700,6 +1703,10 @@ def normalize_text(
     # 「山田太郎　代表取締役」のような語句を区切る全角空白を読点へ変換
     # 半角スペースが入る箇所で止めて読むかはケースバイケースなため、変換は行わない
     # Unicode 正規化でスペースが全て半角に変換される前に実行する必要がある
+    ## 「100　200円」のように数どうしの間の全角空白は、桁区切りと取り違えられないよう仮置きの読点にする
+    res = re.sub(
+        r"(?<=[0-9])\u3000(?=[0-9])", __ADDED_COMMA_BEFORE_DIGIT_PLACEHOLDER, res
+    )
     res = res.replace("\u3000", "、")
 
     # ゼロ幅スペースを削除
@@ -1739,6 +1746,9 @@ def normalize_text(
     res = res.replace("\u2060", " ")
 
     res = __convert_numbers_to_words(res)  # 「100円」→「百円」等
+
+    # 読点の桁区切りを除き終えたので、数の連結を防ぐために足した読点を戻す
+    res = res.replace(__ADDED_COMMA_BEFORE_DIGIT_PLACEHOLDER, "、")
 
     # 日付・時刻・単位を展開した後、終点が省略された数量の波ダッシュを「から」に変換する
     ## 直後に助詞が続く波ダッシュは残し、後段で長音として扱う
@@ -3393,7 +3403,15 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     # 数字 + マーカー + スペース + 数字 は、後段で数字が連結されないよう先に ' に変換する
     # 例: 「試合結果5の3の2 309号」相当の内部表現 -> 「試合結果5の3の2'309号」
     text = __DIGIT_MARKER_SPACE_DIGIT_PATTERN.sub(r"\1'\2", text)
-    text = __MARKER_SPACE_PATTERN.sub("、", text)
+    ## 「0120-123-456 100円」のように後ろに数が続く読点は、桁区切りと取り違えられないよう仮置きの読点にする
+    text = __MARKER_SPACE_PATTERN.sub(
+        lambda m: (
+            __ADDED_COMMA_BEFORE_DIGIT_PLACEHOLDER
+            if m.string[m.end() : m.end() + 1].isdigit() is True
+            else "、"
+        ),
+        text,
+    )
     text = text.replace(_MARKER, "")
     text = text.replace(_ADDRESS_MARKER, "")
     # 電話番号・郵便番号の組の区切りを、後段とコアが読むハイフンに戻す

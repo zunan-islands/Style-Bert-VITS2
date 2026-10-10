@@ -5149,6 +5149,37 @@ def test_normalize_text_currency():
     assert normalize_text("₡1000") == "1000コロン"
 
 
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 丸数字と後ろの数の間に足した読点は、桁区切りではないので残す
+        ("①100円", "1,100円"),
+        ("①12、345人", "1,12345人"),
+        # 原文で読点を桁区切りに使った数は、丸数字の後でも1つの数にまとめる
+        ("②1、000円", "2,1000円"),
+        # 電話番号の後の空白から足した読点も、後ろの金額とまとめない
+        ("0120-123-456 100円", "0120-123-456,100円"),
+        ("03-1234-5678 2、000人", "03-1234-5678,2000人"),
+        # 数どうしの間の全角空白から足した読点も、1つの数にまとめない
+        ("100　200円", "100,200円"),
+        # 原文の読点の桁区切りは、従来どおり除く
+        ("参加者は1、000名", "参加者は1000名"),
+    ],
+)
+def test_normalize_text_inserted_commas_are_not_digit_separators(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「①100円」の丸数字の後や、「0120-123-456 100円」の電話番号の後の空白に、正規化が数の連結を防ぐために足した読点が、
+    後段で「1、000名」のような原文の読点の桁区切りと取り違えられて除かれ、「1100円」「0120-123-456100円」と別の金額や番号に変わらないことを確認する。
+    """
+
+    if for_irodori is True:
+        expected = expected.replace(",", "、")
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
 @pytest.mark.parametrize(
     ("text", "expected", "expected_irodori"),
     [
