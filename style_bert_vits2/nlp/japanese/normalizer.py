@@ -951,6 +951,25 @@ __WORD_RANGE_WAVE_DASH_PATTERN = re.compile(
     r"(?=[\u3400-\u4DBF\u4E00-\u9FFF々]|(?![ァィゥェォャュョッヮンー])[ァ-ヴ])"
     r"(?=(?P<interval>[\u3400-\u4DBF\u4E00-\u9FFF々ァ-ヴー]*間(?![\u3400-\u4DBF\u4E00-\u9FFF々]))?)"
 )
+# 曜日どうしの範囲 (「月曜〜金曜」「月〜金」「木〜日曜」) を検出する
+## 曜日1文字は「月から金」だとコアが「月」を「ツキ」と読むので、「曜」を補うために前後の曜日を取り出す
+## 漢字に続く「十一月〜」の月や、漢字が続く「日本」の日は曜日ではないので除く
+__WEEKDAY_RANGE_WAVE_DASH_PATTERN = re.compile(
+    r"(?<![\u3400-\u4DBF\u4E00-\u9FFF々])(?P<start>[月火水木金土日])(?P<start_suffix>曜日?)?[〜~]"
+    r"(?P<end>[月火水木金土日])(?:(?P<end_suffix>曜日?)|(?![\u3400-\u4DBF\u4E00-\u9FFF々]))"
+)
+# 範囲の前の語の終わりが時を表す語 (曜日・旬・月末・時刻・季節・期間など) かを判定する
+__TIME_WORD_BEFORE_RANGE_PATTERN = re.compile(
+    r"(?:曜日?|[上中下初]旬|月[初中末]|年[初末内]|年度末|週末|平日|祝日|休日|祝前日|正午|午前|午後|早朝|朝|昼|夕方?|晩|夜|深夜"
+    r"|春|夏|秋|冬|時半?|分|日|[ヵかヶカケ箇]月|年|週間?)$"
+)
+# 範囲の後ろの語の始まりが時を表す語かを判定する
+## 「前十一時半〜後３時」の「後3時」のような時刻の略記と、「数年」のような期間も含める
+__TIME_WORD_AFTER_RANGE_PATTERN = re.compile(
+    r"(?:[月火水木金土日]曜|[上中下初]旬|年内|年末|年度末|月末|週末|平日|祝日|休日|翌|正午|午前|午後"
+    r"|[前後][0-9〇一二三四五六七八九十]|早朝|朝|昼|夕|晩|夜|深夜|春|夏|秋|冬"
+    r"|数[ヵかヶカケ箇]?[月年日週時]|[0-9〇一二三四五六七八九十百]+[時分日月年]|明治|大正|昭和|平成|令和)"
+)
 # 終点が省略された範囲の波ダッシュと、その直後の区切りを照合する
 __OPEN_ENDED_RANGE_SUFFIX_PATTERN = re.compile(
     r"\s*[〜~～](?=$|[\s、。,.!?！？:;…‥）)」』】〕\]}〉》”’'\"])"
@@ -1667,11 +1686,32 @@ def normalize_text(
         ## 「.」のままだと pyopenjtalk が「4.0.6」を「ヨンテンゼロ、ロク」と2つ目の点で区切って読む
         res = __DOTTED_NUMBER_PATTERN.sub(lambda m: m.group().replace(".", "点"), res)
 
+    # 曜日どうしの範囲は「から」で読み、曜日1文字には「曜」を補って「月曜から金曜」にする
+    res = __WEEKDAY_RANGE_WAVE_DASH_PATTERN.sub(
+        lambda m: (
+            f"{m.group('start')}{m.group('start_suffix') or '曜'}から"
+            f"{m.group('end')}{m.group('end_suffix') or '曜'}"
+        ),
+        res,
+    )
+
     # 漢字やカタカナの語どうしをつなぐ波ダッシュは、語の範囲や副題の区切りなので、長音にせず休止にする
     ## 「東京〜大阪間」のように「間」が続く範囲は、1つの句としてつなげて読む
-    res = __WORD_RANGE_WAVE_DASH_PATTERN.sub(
-        lambda m: "" if m.group("interval") is not None else "、", res
-    )
+    ## 「正午〜午後5時」「秋〜冬」のように前後とも時を表す語の範囲は、「から」で読む
+    def convert_word_range_wave_dash(match: re.Match[str]) -> str:
+        # 「数日〜数週間」のように後ろの期間が「間」で終わる範囲も時の範囲なので、区間の「間」より先に判定する
+        if (
+            __TIME_WORD_BEFORE_RANGE_PATTERN.search(match.string, 0, match.start())
+            is not None
+            and __TIME_WORD_AFTER_RANGE_PATTERN.match(match.string, match.end())
+            is not None
+        ):
+            return "から"
+        if match.group("interval") is not None:
+            return ""
+        return "、"
+
+    res = __WORD_RANGE_WAVE_DASH_PATTERN.sub(convert_word_range_wave_dash, res)
 
     # 「～」と「〜」と「~」も長音記号として扱う
     res = res.replace("~", "ー")
