@@ -174,16 +174,20 @@ __BLOCK_PATTERN = re.compile(r"(?:(?:[#$%&*+\-=_:/\\|;<>^])|\s){3,}")
 __NUMBER_RANGE_PATTERN = re.compile(
     r"(\d+(?:\.\d+)?(?:\s*[a-zA-Z]+)?)\s*[〜~～]\s*(\d+(?:\.\d+)?(?:\s*[a-zA-Z]+)?)"
 )
-# 「2〜3日かかる」「15〜6年前」のように、1ずつ違う数どうしの数量の範囲を検出する
+# 「2〜3日かかる」「15〜6年前」「七〜八人」のように、1ずつ違う数どうしの数量の範囲を検出する
 ## 終わりが1桁の数で、後ろに日数・人数・年数・個数のような数量の助数詞か単位が続くものだけを対象にする
+## 算用数字どうしと漢数字どうしを対象にし、どちらが算用数字か漢数字かは置換時に揃っているか確かめる
 ## 時刻 (「2〜3時」)・月 (「2〜3月」)・日付 (「2〜3日まで」「5月2〜3日」)・学年や順番 (「1〜2年生」「2〜3日目」)・元号の年は数量ではないので除く
 ## 「月2〜3回」も、コアが「月2」の後で区切って「ツキニ、サンカイ」と読むので除く
-## 「日」は「日後」「日ほど」のように日数と分かる語が続くときだけ数量とし、「2〜3日間」はコアが「ミッカカン」と日付の読みにするので除く
+## 「百二〜三人」のように大きな数の位に続く漢数字と、「二点三〜四」のように漢数字の小数点の「点」「・」に続く数も、範囲の始まりが数全体でなくなるので除く
+## 「日」は「日後」「日ほど」「日間」のように日数と分かる語が続くときだけ数量とする
 __ADJACENT_NUMBER_RANGE_PATTERN = re.compile(
-    r"(?<![0-9.,/:A-Za-z\-−－第時月])(?<!明治|大正|昭和|平成|令和)"
-    r"(?P<start>[1-9]?[1-8])[〜~～](?P<end>[2-9])"
+    r"(?<![0-9.,/:A-Za-z\-−－第時月零〇一二三四五六七八九十百千万億兆])"
+    r"(?<!明治|大正|昭和|平成|令和)(?<!明治\s|大正\s|昭和\s|平成\s|令和\s)(?<![零〇一二三四五六七八九十][点・])"
+    r"(?P<start>[1-9]?[1-8]|(?:[二三四五六七八九]?十)?[一二三四五六七八])"
+    r"[〜~～](?P<end>[2-9]|[二三四五六七八九])"
     r"(?=(?P<counter>時間|分(?!目)|秒|週間|[ヶヵカケか]月|年(?!生|度|目|代)"
-    r"|日(?:後|前|で|ほど|程度|くらい|ぐらい|おき|ごと|以内|以上|かか|も)"
+    r"|日(?:間|後|前|で|ほど|程度|くらい|ぐらい|おき|ごと|以内|以上|かか|も)"
     r"|人(?!目)|個|回(?!目)|本|枚|杯|台|冊|件|歳|才|割|倍|度|点|匹|頭|軒|粒|社|名"
     r"|kg|km|cm|mm|g(?![A-Za-z])|m(?![A-Za-z])|%|℃))"
 )
@@ -2087,7 +2091,7 @@ def __collect_normalization_details(
 
     # 概数の形にした「2〜3日」は、概数と判定する手がかりの助数詞や単位まで含めて1つの区間にする
     ## 数の範囲だけを再変換すると「2から3」になって全文の「2、3」と食い違い、区間ごとに後ろの全文を変換し直すことになる
-    ## 「1〜2人」のように概数にしない範囲も同じく助数詞まで含めた区間になるが、区間だけの変換が全文の「1から2人」と一致するので、そのまま記録できる
+    ## 「15〜7年」のように概数にしない範囲も同じく助数詞まで含めた区間になるが、区間だけの変換が全文の「15から7年」と一致するので、そのまま記録できる
     candidates.extend(
         (match.start(), match.end("counter"), "number", 23)
         for match in __ADJACENT_NUMBER_RANGE_PATTERN.finditer(search_text)
@@ -2541,17 +2545,32 @@ def __replace_symbols(text: str) -> str:
                 return f"{converted_start}から{converted_end}"
         return f"{start}から{end}"
 
-    # 1ずつ違う数どうしの数量の範囲は、コアが休止を置かずに「ニサンニチ」と読む概数の「2、3日」の形にする
+    # 1ずつ違う数どうしの数量の範囲は、コアが休止を置かずに「ニサンニチ」「ナナハチニン」と読む概数の「2、3日」「7、8人」の形にする
     def convert_adjacent_number_range(match: re.Match[str]) -> str:
-        following_text = match.string[match.end() :]
+        start = match.group("start")
+        end = match.group("end")
         if (
-            # 「15〜6年」は前の数の1の位と後ろの数が1ずつ違うものだけを概数にする
-            int(match.group("start")) % 10 + 1 != int(match.group("end"))
-            # 「1〜2人」はコアが「2人」を「フタリ」と読み「イチフタリ」になるので除く
-            or (match.group("end") == "2" and following_text.startswith("人"))
+            # 「5〜六人」のように算用数字と漢数字が混ざった範囲は概数にしない
+            start[-1].isdigit() != end.isdigit()
+            # 「15〜6年」「十五〜六年」は前の数の1の位と後ろの数が1ずつ違うものだけを概数にする
+            or int(start[-1].translate(__KANJI_TO_DIGIT_TABLE)) + 1
+            != int(end.translate(__KANJI_TO_DIGIT_TABLE))
         ):
             return match.group()
-        return f"{match.group('start')}、{match.group('end')}"
+        # 漢数字の範囲は算用数字にしてから概数の形にする
+        ## コアは「二、三時間」「二、三分」「四、五本」「七、八頭」のように漢数字の概数を助数詞によって区切ったり別の語 (「ヤツガシラ」) と読んだりするが、算用数字の「2、3時間」はどの助数詞でも休止を置かずに読む
+        if end.isdigit() is False:
+            tens, _, ones = start.rpartition("十")
+            start = str(
+                (
+                    int(tens.translate(__KANJI_TO_DIGIT_TABLE) or 1) * 10
+                    if "十" in start
+                    else 0
+                )
+                + int(ones.translate(__KANJI_TO_DIGIT_TABLE))
+            )
+            end = end.translate(__KANJI_TO_DIGIT_TABLE)
+        return f"{start}、{end}"
 
     text = __ADJACENT_NUMBER_RANGE_PATTERN.sub(convert_adjacent_number_range, text)
     text = __NUMBER_RANGE_PATTERN.sub(convert_range, text)
