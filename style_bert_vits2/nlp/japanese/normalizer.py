@@ -1019,9 +1019,9 @@ __ENGLISH_WORD_PATTERN = re.compile(r"[a-zA-Z0-9]")
 # =========== replace_punctuation() で使う定数・正規表現パターン ===========
 
 __IRODORI_DECIMAL_PATTERN = re.compile(r"(?<![\d.])(\d+)\.(\d+)(?![\d.])")
-# 「6.2.1」「4.0.5」のように「.」で3つ以上に区切り、すべての項が先頭にゼロのない1〜2桁の節番号を検出する
+# 「6.2.1」「4.0.5」のように「.」で3つ以上に区切り、すべての項が先頭にゼロのない1〜2桁の節番号や版番号を検出する
 ## 「1.02.003」の識別子や「192.168.0.1」の IP アドレスは、各項を整数として読み替えない
-__IRODORI_DOTTED_NUMBER_PATTERN = re.compile(
+__DOTTED_NUMBER_PATTERN = re.compile(
     r"(?<![\d.])(?:0|[1-9]\d?)(?:\.(?:0|[1-9]\d?)){2,}(?!\.?\d)"
 )
 
@@ -1641,13 +1641,19 @@ def normalize_text(
             return f"{integer_words}点{fractional_words}"
 
         # 「6.2.1」の節番号は区切りごとの数を「点」でつなぎ、句点で区切られたり小数とまとめられたりしないようにする
-        res = __IRODORI_DOTTED_NUMBER_PATTERN.sub(
+        ## 版番号の0は「零」と書くと「レイ」と読まれるので、「ゼロ」と書く
+        res = __DOTTED_NUMBER_PATTERN.sub(
             lambda m: "点".join(
-                str(num2words(int(part), lang="ja")) for part in m.group().split(".")
+                "ゼロ" if part == "0" else str(num2words(int(part), lang="ja"))
+                for part in m.group().split(".")
             ),
             res,
         )
         res = __IRODORI_DECIMAL_PATTERN.sub(convert_irodori_decimal, res)
+    else:
+        # 通常の経路でも節番号・版番号は「6点2点1」と「点」でつなぐ
+        ## 「.」のままだと pyopenjtalk が「4.0.6」を「ヨンテンゼロ、ロク」と2つ目の点で区切って読む
+        res = __DOTTED_NUMBER_PATTERN.sub(lambda m: m.group().replace(".", "点"), res)
 
     # 漢字やカタカナの語どうしをつなぐ波ダッシュは、語の範囲や副題の区切りなので、長音にせず休止にする
     ## 「東京〜大阪間」のように「間」が続く範囲は、1つの句としてつなげて読む
@@ -1767,6 +1773,7 @@ def __collect_normalization_details(
         (__POWER_PATTERN, "number", 34),
         (__EXPONENT_PATTERN, "number", 35),
         (__IRODORI_DECIMAL_PATTERN, "number", 36),
+        (__DOTTED_NUMBER_PATTERN, "number", 36),
         (__KANJI_ZERO_DIGIT_SEQUENCE_PATTERN, "number", 37),
         (__ROMAN_NUMERAL_PATTERN, "number", 38),
     ]
