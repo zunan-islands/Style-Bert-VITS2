@@ -290,10 +290,11 @@ __EXPONENT_FRACTION_DIGIT_TRANSLATE_TABLE = str.maketrans(
 # （コラボレーション: きのこの山×タケノコの里、寸法: 1920×1080 等）
 # それ以外の場合は「バツ」と読む（記号: ○か×か、単体使用 等）
 # ❌ (U+274C) のバリエーションセレクタ付き（❌️ 等）も対象
+## 人名や作品名をつなぐコラボ表記の「落合陽一 × 羽生結弦」「（作家）×篠原勝之」「「鬼滅の刃」×「呪術廻戦」」のように、空白や括弧を挟んでも「かける」と読む
 __CROSS_MARK_AS_KAKERU_PATTERN = re.compile(
-    r"(?<=[\u4e00-\u9fff\u3400-\u4dbf\u30a0-\u30ff0-9a-zA-Z])"
-    r"[×✖⨯❌][\ufe0e\ufe0f]?"
-    r"(?=[\u4e00-\u9fff\u3400-\u4dbf\u30a0-\u30ff0-9a-zA-Z])",
+    r"(?<=[\u4e00-\u9fff\u3400-\u4dbf\u30a0-\u30ff0-9a-zA-Z)」』】》〉])"
+    r"[ \u3000]*[×✖⨯❌][\ufe0e\ufe0f]?[ \u3000]*"
+    r"(?=[\u4e00-\u9fff\u3400-\u4dbf\u30a0-\u30ff0-9a-zA-Z(「『【《〈])",
 )
 # 上記パターンに該当しなかった残りの × 系文字を「バツ」に変換するパターン
 __CROSS_MARK_AS_BATSU_PATTERN = re.compile(r"[×✖⨯❌][\ufe0e\ufe0f]?")

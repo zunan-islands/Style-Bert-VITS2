@@ -4578,6 +4578,45 @@ def test_normalize_text_cross_mark_context_dependent() -> None:
     assert normalize_text("❌\ufe0f") == "バツ"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 人名や作品名どうしをつなぐ「×」は、空白や括弧を挟んでも「かける」と読む
+        (
+            "対談　落合陽一×羽生結弦",
+            "対談,落合陽一かける羽生結弦",
+            "対談、落合陽一かける羽生結弦",
+        ),
+        ("落合陽一 × 羽生結弦", "落合陽一かける羽生結弦", "落合陽一かける羽生結弦"),
+        ("落合陽一　×　羽生結弦", "落合陽一かける羽生結弦", "落合陽一かける羽生結弦"),
+        (
+            "嵐山光三郎（作家）×篠原勝之（ゲージツ家）",
+            "嵐山光三郎'作家'かける篠原勝之'ゲージツ家'",
+            "嵐山光三郎（作家）かける篠原勝之（ゲージツ家）",
+        ),
+        (
+            "「鬼滅の刃」×「呪術廻戦」",
+            "'鬼滅の刃'かける'呪術廻戦'",
+            "「鬼滅の刃」かける「呪術廻戦」",
+        ),
+        # 伏せ字の「××」と記号の対比、掛け算は従来どおり読む
+        ("××病院", "バツバツ病院", "バツバツ病院"),
+        ("○か×か", "マルかバツか", "マルかバツか"),
+        ("2×3", "2かける3", "2かける3"),
+        ("円周率×母線", "円周率かける母線", "円周率かける母線"),
+    ],
+)
+def test_normalize_text_cross_mark_between_names(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「落合陽一 × 羽生結弦」「「鬼滅の刃」×「呪術廻戦」」のように、空白や括弧を挟んで人名や作品名をつなぐコラボ表記の「×」が、「バツ」ではなく「かける」と読まれることを確認する。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
 @pytest.mark.parametrize("for_irodori", [False, True])
 @pytest.mark.parametrize(
     ("text", "expected"),
