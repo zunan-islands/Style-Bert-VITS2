@@ -370,6 +370,16 @@ __NUMBER_UNIT_WORD_MAP = {
     "in": "インチ",
     "kt": "ノット",
 }
+# 数の前の版の略語 (「Ver.2.0」「ver3」) を検出する
+## KATAKANA_MAP は「ver」を「バー」と読むので、数の前では「バージョン」と書く
+__VERSION_ABBREVIATION_PATTERN = re.compile(
+    r"(?<![A-Za-z])[Vv]er(?:sion)?\.?[ \u3000]?(?=\d)"
+)
+# 点で区切った版番号の前の「v」(「v1.2.3」) を検出する
+## 英単語のカタカナ読みが「v1.2.3」を1語として扱うと点が消えるので、先に「ブイ」と書き分ける
+__VERSION_V_PATTERN = re.compile(
+    r"(?<![A-Za-z])[Vv](?=\d+(?:\.\d+)+(?![\d.]|[A-Za-z]))"
+)
 # 負の数の符号 (「値は-0.5」「前年比-3.2%」「－１」) を検出する
 ## 数字・漢数字・英字・閉じ括弧の後の「-」は範囲・引き算・型番や部屋番号の区切りなので除き、「- 1つ目」のように空白が続く箇条書きの記号も除く
 ## 「序-2-1図」のように後ろの数にさらに「-」と数が続くものは、図表や章の番号の区切りなので除く
@@ -1964,6 +1974,15 @@ def __collect_normalization_details(
         if number is not None:
             candidates.append((match.start(), match.end() + number.end(), "number", 25))
 
+    # 「バージョン」「ブイ」と書き換える版の略語と「v」は、後ろの版番号まで含めて1つの区間にする
+    for pattern in (__VERSION_ABBREVIATION_PATTERN, __VERSION_V_PATTERN):
+        for match in pattern.finditer(search_text):
+            number = re.match(r"\d+(?:\.\d+)*", search_text[match.end() :])
+            if number is not None:
+                candidates.append(
+                    (match.start(), match.end() + number.end(), "number", 36)
+                )
+
     # 数値と百分率記号は一つの発話内容になるため、数値部分を分割しない
     candidates.extend(
         (match.start(), match.end(), "percentage", 0)
@@ -2825,6 +2844,10 @@ def __replace_symbols(text: str) -> str:
     text = __NUMBER_UNIT_WORD_PATTERN.sub(
         lambda m: m.group(1) + __NUMBER_UNIT_WORD_MAP[m.group(2)], text
     )
+
+    # 数の前の「Ver.」は「バージョン」、点で区切った版番号の前の「v」は「ブイ」と書き、版番号の点を英単語の変換から守る
+    text = __VERSION_ABBREVIATION_PATTERN.sub("バージョン", text)
+    text = __VERSION_V_PATTERN.sub("ブイ", text)
 
     # 語や記号の後で数字の直前にある「-」は負の数の符号なので、休止として読み落とさずに「マイナス」と読む
     text = __NEGATIVE_SIGN_PATTERN.sub("マイナス", text)
