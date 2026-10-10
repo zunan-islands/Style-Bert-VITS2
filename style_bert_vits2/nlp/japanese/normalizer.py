@@ -222,7 +222,8 @@ __DATE_PATTERN = re.compile(
     r"(?<!\d)(?:\d{4}[-/\.][0-9]{1,2}[-/\.][0-9]{1,2}|\d{2}[-/\.][0-9]{1,2}[-/\.][0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|\d{4}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(?!\d)"
 )
 __YEAR_MONTH_PATTERN = re.compile(r"(?<!\d)(18|19|20|21|22)(\d{2})/([0-1]?\d)(?!\d)")
-__FRACTION_PATTERN = re.compile(r"(\d+)[/／](\d+)")
+# 「3/0号」「13/15号」のように直後に「号」が続く番号は、かぎ針などの号数なので分数にしない
+__FRACTION_PATTERN = re.compile(r"(\d+)[/／](\d+)(?![\d号])")
 # 計量スプーンの直後の「2分1」を分数とし、所要時間の「2分1秒」は区別する
 __SPOON_FRACTION_PATTERN = re.compile(r"(小さじ|大さじ)\s*(\d+)分(\d+)(?!\d)")
 # 「1/2カップ」「1/2個分」の分量の助数詞を検出する
@@ -2256,6 +2257,9 @@ def __replace_symbols(text: str) -> str:
         try:
             numerator = int(match.group(1))
             denominator = int(match.group(2))
+            # 分母が0の「3/0」は分数として成り立たないので、書き換えずに残す
+            if denominator == 0:
+                return match.group(0)
             return f"{num2words(denominator, lang='ja')}ぶんの{num2words(numerator, lang='ja')}"
         except ValueError:
             return match.group(0)

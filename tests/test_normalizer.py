@@ -2206,7 +2206,7 @@ def test_normalize_text_dates():
         normalize_text("2024/01/32") == "2024年1月/32"
     )  # 32日は異常値なので年と月だけ変換される
     assert normalize_text("2024/02/30") == "2024年2月/30"  # 存在しない日付
-    assert normalize_text("2024/00/00") == "零ぶんの二千二十四/00"  # ゼロの月日
+    assert normalize_text("2024/00/00") == "2024/00/00"  # ゼロの月日
 
     # 追加のテストケース
     assert normalize_text("2024年5月8日 （月）") == "2024年5月8日月曜日"
@@ -2592,6 +2592,44 @@ def test_normalize_text_quantity_fractions(
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # かぎ針の号数は「3/0号」と書き、分母が0の分数ではない
+        ("3/0号かぎ針", "3/0号かぎ針", "3/0号かぎ針"),
+        ("かぎ針7/0号", "かぎ針7/0号", "かぎ針7/0号"),
+        (
+            "前端、えりぐり(縁編み)5/0号針",
+            "前端,えりぐり'縁編み'5/0号針",
+            "前端、えりぐり（縁編み）5/0号針",
+        ),
+        # 分母が0の分数は意味をなさないので、号数以外でも分数にしない
+        ("5/0", "5/0", "5/0"),
+        # 直後に「号」が続く番号は号数なので、分母が0でなくても分数にしない
+        ("13/15号", "13/15号", "13/15号"),
+        # 号数の文脈でない分数は、従来どおり「ぶんの」で読む
+        ("16/9", "九ぶんの十六", "九ぶんの十六"),
+        (
+            "材料の2/30を使用した。",
+            "材料の三十ぶんの二を使用した.",
+            "材料の三十ぶんの二を使用した。",
+        ),
+        # 月日として成り立つ「2/3号」は、雑誌の日付の号として従来どおり日付で読む
+        ("2/3号", "2月3日号", "2月3日号"),
+    ],
+)
+def test_normalize_text_fraction_excludes_zero_denominator_and_gou_number(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    かぎ針の号数「3/0号」が「零ぶんの三号」と分数に読まれず、書き換えずにコアへ渡されて「サン、ゼロゴー」と読まれることを確認する。
+    分母が0の「5/0」や、直後に「号」が続く「13/15号」も分数にせず、号数の文脈でない「16/9」は従来どおり「九ぶんの十六」と読む。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
 
 
 @pytest.mark.parametrize(
