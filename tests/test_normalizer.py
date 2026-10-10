@@ -5938,6 +5938,26 @@ def test_normalize_text_english():
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 商品名の「POCARI SWEAT」は、推定で「ポカリスウェイト」になる
+        ("POCARISWEATを飲む", "ポカリスエットを飲む"),
+        # 遺伝子の「cDNA」と肝機能の検査値の「GOT」は、略語として1文字ずつ読む
+        ("cDNAの合成", "シーディーエヌエーの合成"),
+        ("GOTの値", "ジーオーティーの値"),
+        ("got", "ゴット"),
+    ],
+)
+def test_normalize_text_katakana_map_words(text: str, expected: str) -> None:
+    """
+    英字のカタカナ読みの辞書に足した商品名や略語が、推定の読み (「ポカリスウェイト」「シーディーナ」「ゴット」) にならず、辞書の読みで読まれることを確認する。
+    「cDNA」「GOT」は大文字と小文字を区別する略語の行なので、英語の「got」は従来どおり「ゴット」と読む。
+    """
+
+    assert normalize_text(text) == expected
+
+
 @pytest.mark.parametrize("for_irodori", [False, True])
 @pytest.mark.parametrize(
     ("text", "expected"),
