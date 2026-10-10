@@ -2573,10 +2573,13 @@ def __replace_symbols(text: str) -> str:
     text = __WAREKI_PATTERN.sub(convert_wareki, text)
 
     # 元号に続く「15.4.1」は和暦の年月日なので、2桁の年を西暦に広げずに「大正15年4月1日」と書く
+    ## 年は「元」と和暦の省略表記と同じ1〜99だけを有効にし、範囲外の「平成0.1.8」は書き換えない
     text = __ERA_DOTTED_DATE_PATTERN.sub(
         lambda m: (
             f"{m.group(1)}{m.group(2)}年{int(m.group(3))}月{int(m.group(4))}日"
-            if 1 <= int(m.group(3)) <= 12 and 1 <= int(m.group(4)) <= 31
+            if (m.group(2) == "元" or 1 <= int(m.group(2)) <= 99)
+            and 1 <= int(m.group(3)) <= 12
+            and 1 <= int(m.group(4)) <= 31
             else m.group(0)
         ),
         text,
