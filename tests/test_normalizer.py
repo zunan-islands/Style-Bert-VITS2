@@ -17,7 +17,10 @@ from style_bert_vits2.nlp.japanese.normalizer import (
 
 
 def test_normalize_text_basic():
-    """基本的な正規化のテスト"""
+    """
+    句読点の半角化、特殊な空白文字や制御文字の処理、連続する重複記号の畳み込みなど、基本的な正規化処理が行われることを確認する。
+    """
+
     # 基本的な句読点の正規化
     assert normalize_text("こんにちは。さようなら。") == "こんにちは.さようなら."
     assert normalize_text("おはよう、こんばんは、") == "おはよう,こんばんは,"
@@ -38,7 +41,9 @@ def test_normalize_text_basic():
 
 
 def test_normalize_text_return_details_tracks_spoken_replacements():
-    """発話内容を置換する入力だけが元区間と出力区間つきで返る"""
+    """
+    return_details=True を指定した場合に、パーセンテージ・URL・記号・単位・日付など発話内容を置換する入力のみが元区間と正規化後区間付きで details に記録されることを確認する。
+    """
 
     text = "90% https://example.com/a?b=1 %s 100m 2024/01/01"
     result = normalize_text(text, return_details=True)
@@ -82,7 +87,9 @@ def test_normalize_text_return_details_tracks_spoken_replacements():
 def test_normalize_text_english_space_detail_positions(
     text: str, fragment: str, start: int, end: int, for_irodori: bool
 ) -> None:
-    """「text　1kg」の空白変換で位置がずれても、「1kg」の出力位置を記録"""
+    """
+    英単語と数量の間の全角空白が読点へ変換されて文字位置がずれた場合でも、後続の数量やパーセンテージの正規化後区間が正確に記録されることを確認する。
+    """
 
     result = normalize_text(text, for_irodori=for_irodori, return_details=True)
     assert len(result.details) == 1
@@ -97,7 +104,9 @@ def test_normalize_text_english_space_detail_positions(
 
 
 def test_normalize_text_return_details_keeps_decorative_percent_symbols():
-    """連続する装飾記号も発話へ変換された各記号だけを記録する"""
+    """
+    装飾用途で連続するパーセント記号において、発話へ変換された各記号が個別の区間として details に記録されることを確認する。
+    """
 
     result = normalize_text("装飾%%%", return_details=True)
 
@@ -113,7 +122,9 @@ def test_normalize_text_return_details_keeps_decorative_percent_symbols():
 
 
 def test_normalize_text_return_details_keeps_percent_encoding_inside_url():
-    """URL 内のパーセント符号を URL 全体の発話区間として記録する。"""
+    """
+    URL 内のパーセントエンコーディングが独立したパーセント記号として誤認されず、URL 全体の一つの発話区間として記録されることを確認する。
+    """
 
     text = "https://x.test/a%20b?x=50%25"
     result = normalize_text(text, for_irodori=True, return_details=True)
@@ -128,7 +139,9 @@ def test_normalize_text_return_details_keeps_percent_encoding_inside_url():
 
 
 def test_normalize_text_return_details_keeps_pathless_url_query_as_one_segment():
-    """パスの無いクエリ付き URL も符号化を含めて一つの発話区間として記録する。"""
+    """
+    パスを持たないクエリ付き URL についても、パーセントエンコーディングを含めて全体が一つの発話区間として details に記録されることを確認する。
+    """
 
     text = "https://example.com?q=a%20b"
     result = normalize_text(text, for_irodori=True, return_details=True)
@@ -143,7 +156,9 @@ def test_normalize_text_return_details_keeps_pathless_url_query_as_one_segment()
 
 
 def test_normalize_text_return_details_tracks_fullwidth_url_and_email():
-    """全角の URL とメールアドレスも半角化後の照合で発話区間として記録する。"""
+    """
+    全角で記述された URL やメールアドレスについても、半角化後の照合により発話区間として details に正確に記録されることを確認する。
+    """
 
     url_text = "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ"
     email_text = "ｔｅｓｔ＠ｅｘａｍｐｌｅ．ｃｏｍ"
@@ -173,7 +188,9 @@ def test_normalize_text_return_details_tracks_fullwidth_url_and_email():
 
 
 def test_normalize_text_return_details_tracks_contextual_kakeru_cross_mark():
-    """両側が漢字の × を、全文と同じ「かける」として記録する。"""
+    """
+    両側を漢字に挟まれた「×」が、全文正規化の文脈判定と同じく「かける」として置換され、その区間が details に記録されることを確認する。
+    """
 
     text = "山×里"
     result = normalize_text(text, for_irodori=True, return_details=True)
@@ -192,7 +209,9 @@ def test_normalize_text_return_details_tracks_contextual_kakeru_cross_mark():
 
 
 def test_normalize_text_return_details_tracks_number_expressions():
-    """数式、小数、位取りの漢数字を数値表現として一つの区間へ記録する"""
+    """
+    数式、小数、位取りの漢数字などが数値表現としてそれぞれ一つの区間として details に記録されることを確認する。
+    """
 
     standard_result = normalize_text("1+1=2 と 二〇二四", return_details=True)
     irodori_result = normalize_text(
@@ -263,7 +282,9 @@ def test_normalize_text_return_details_tracks_context_dependent_replacements(
 
 
 def test_normalize_text_return_details_keeps_str_compatibility_for_irodori():
-    """既存呼び出しと Irodori-TTS 向け出力は文字列のまま維持する"""
+    """
+    return_details=False の通常呼び出しや Irodori-TTS 向け呼び出しにおいて、戻り値が互換性を保った str 型のまま返ることを確認する。
+    """
 
     assert normalize_text("90%") == "90パーセント"
     assert normalize_text("90%", for_irodori=True) == "90パーセント"
@@ -308,7 +329,9 @@ def test_normalize_text_return_details_tracks_all_spoken_replacement_kinds(
     original_text: str,
     normalized_text: str,
 ) -> None:
-    """既存正規化パターンが追加・置換・削除した発話区間を全て記録する。"""
+    """
+    正規化パターンによって置換・追加・削除されたすべての発話区間が漏れなく details に記録されることを確認する。
+    """
 
     result = normalize_text(text, for_irodori=True, return_details=True)
 
@@ -328,7 +351,9 @@ def test_normalize_text_return_details_tracks_all_spoken_replacement_kinds(
 
 
 def test_normalize_text_return_details_prefers_percentage_over_decimal_and_symbol():
-    """小数と百分率記号を一つの百分率区間へまとめる。"""
+    """
+    「12.5%」のように小数とパーセント記号が組み合わさった場合に、個別の小数や記号ではなく一つの百分率区間として details に記録されることを確認する。
+    """
 
     result = normalize_text("2.5%", for_irodori=True, return_details=True)
 
@@ -342,7 +367,9 @@ def test_normalize_text_return_details_prefers_percentage_over_decimal_and_symbo
 def test_normalize_text_return_details_omits_unmodified_or_non_target_ranges(
     text: str,
 ) -> None:
-    """発話内容を変えない本文や数値に見えても対象外の区間は記録しない。"""
+    """
+    発話内容が変化しない通常のテキストや、数値・記号に見えても正規化置換の対象外となる区間は details に記録されないことを確認する。
+    """
 
     result = normalize_text(text, for_irodori=True, return_details=True)
 
@@ -350,7 +377,10 @@ def test_normalize_text_return_details_omits_unmodified_or_non_target_ranges(
 
 
 def _build_irodori_symbol_replace_map_cases() -> list[tuple[str, str]]:
-    """__IRODORI_SYMBOL_REPLACE_MAP の各エントリをひらがな文脈で検証するケースを生成する"""
+    """
+    __IRODORI_SYMBOL_REPLACE_MAP の各エントリをひらがな文脈で検証するためのテストケース一覧を生成する。
+    """
+
     cases: list[tuple[str, str]] = []
     for key, value in __IRODORI_SYMBOL_REPLACE_MAP.items():
         if key == "\n":
@@ -360,7 +390,10 @@ def _build_irodori_symbol_replace_map_cases() -> list[tuple[str, str]]:
 
 
 def _build_dash_variant_between_japanese_cases() -> list[tuple[str, str]]:
-    """日本語間のダッシュ変種が半角ハイフンとして保持されるケース"""
+    """
+    日本語文字に挟まれたダッシュ各種が半角ハイフンとして保持されるテストケース一覧を生成する。
+    """
+
     dash_chars = [
         "-",
         "\u02d7",
@@ -383,7 +416,10 @@ def _build_dash_variant_between_japanese_cases() -> list[tuple[str, str]]:
 
 
 def _build_irodori_fullwidth_punctuation_variant_cases() -> list[tuple[str, str]]:
-    """NFKC で半角化される全角句読点・括弧の入力を、自然な日本語表記へ戻すケース"""
+    """
+    NFKC 正規化で半角化される全角句読点や各種括弧の入力を、自然な日本語表記へ復元するテストケース一覧を生成する。
+    """
+
     return [
         # 句読点
         ("こんにちは。さようなら。", "こんにちは。さようなら。"),
@@ -427,7 +463,10 @@ def _build_irodori_fullwidth_punctuation_variant_cases() -> list[tuple[str, str]
 
 
 def _build_irodori_differs_from_sbv2_cases() -> list[tuple[str, str, str]]:
-    """Irodori-TTS と SBV2 で句読点の正規化結果が異なるケース (text, irodori_expected, sbv2_expected)"""
+    """
+    Irodori-TTS と SBV2 で句読点の正規化結果が異なるテストケース一覧 (text, irodori_expected, sbv2_expected) を生成する。
+    """
+
     return [
         (
             "こんにちは。さようなら。",
@@ -447,7 +486,9 @@ def _build_irodori_differs_from_sbv2_cases() -> list[tuple[str, str, str]]:
     _build_irodori_symbol_replace_map_cases(),
 )
 def test_normalize_text_for_irodori_symbol_replace_map(text: str, expected: str):
-    """Irodori-TTS 記号置換マップの各エントリが自然な日本語表記へ変換される"""
+    """
+    Irodori-TTS 向けの記号置換マップに登録された各エントリが、自然な日本語表記へ適切に置換されることを確認する。
+    """
 
     assert normalize_text(text, for_irodori=True) == expected
 
@@ -459,7 +500,9 @@ def test_normalize_text_for_irodori_symbol_replace_map(text: str, expected: str)
 def test_normalize_text_for_irodori_fullwidth_punctuation_variants(
     text: str, expected: str
 ):
-    """全角句読点の保持と、NFKC 半角化後の日本語表記への復元"""
+    """
+    Irodori-TTS 向けにおいて、全角句読点が保持され、NFKC で半角化された記号が自然な日本語表記へ復元されることを確認する。
+    """
 
     assert normalize_text(text, for_irodori=True) == expected
 
@@ -471,7 +514,9 @@ def test_normalize_text_for_irodori_fullwidth_punctuation_variants(
 def test_normalize_text_for_irodori_differs_from_sbv2_on_punctuation(
     text: str, irodori_expected: str, sbv2_expected: str
 ):
-    """Irodori-TTS は自然な日本語表記、SBV2 は symbols.PUNCTUATIONS の半角記号へ正規化する"""
+    """
+    Irodori-TTS では自然な日本語表記へ、SBV2 では symbols.PUNCTUATIONS の半角記号へ正規化され、句読点の出力が各用途に合わせて正しく分かれることを確認する。
+    """
 
     assert normalize_text(text, for_irodori=True) == irodori_expected
     assert normalize_text(text, for_irodori=False) == sbv2_expected
@@ -479,7 +524,7 @@ def test_normalize_text_for_irodori_differs_from_sbv2_on_punctuation(
 
 def test_normalize_text_for_irodori_whitespace_and_newlines():
     """
-    「text　text」の全角空白を読点へ変換し、「上段」と「下段」の間の改行は句点へ変換
+    Irodori-TTS 向けにおいて、英単語間の全角空白が読点へ変換され、段落間の改行が句点へ変換されることを確認する。
     """
 
     assert normalize_text("text\u3000text", for_irodori=True) == "テキスト、テキスト"
@@ -507,9 +552,7 @@ def test_normalize_text_fullwidth_spaces_between_japanese_phrases(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    「山田太郎　代表取締役」の全角空白を読点にし、「上段」と「下段」の間の改行は句点にする
-    「日本語 English 日本語」の半角空白は、単語の変換後に除去
-    電話番号の前の「問　03-1234-5678」は問を「トイ」と読み、短い「問　03」は表記を保持
+    日本語語句に挟まれた全角空白が読点へ、改行が句点へ変換され、英単語前後の半角空白の除去や電話番号前の「問」の読み替えが適切に行われることを確認する。
     """
 
     if for_irodori is True:
@@ -553,9 +596,7 @@ def test_normalize_text_spaces_inside_english_and_after_units(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    「Ｍａｃ　ＯＳ　Ｘ」と「Mac OS X」は英単語を続けて読み、「Mac　OS　X」は読点へ変換
-    「ｔｅｘｔ　ｔｅｘｔ」は続けて読み、「text　text」と「五十cm　」の全角空白は読点へ変換
-    「Ｍａｃ　OS　Ｘ」「Mac　ＯＳ　X」の全角英字と半角英字の間も続けて読む
+    英単語内や全角・半角英字の間の空白、および単位の後ろの全角空白が、連続した読みまたは読点へ適切に変換されることを確認する。
     """
 
     if for_irodori is True:
@@ -595,7 +636,7 @@ def test_normalize_text_spaced_quantities(
     text: str, expected: str, irodori_expected: str, for_irodori: bool
 ) -> None:
     """
-    「七十cm　0.6cm」の単位間の空白を除去して、小数点を保持
+    数量や単位の間に置かれた空白が除去され、小数が適切に保持された上で正規化されることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -625,8 +666,7 @@ def test_normalize_text_quantity_and_circle_contexts(
     text: str, expected: str, irodori_expected: str, for_irodori: bool
 ) -> None:
     """
-    「1/2 個人面談」は日付、「5kg−1.5kg」は2つの数量として変換
-    「○九〇一二三四五六七八」は電話番号、「○さん」の○は「マル」として読む
+    文脈に応じた日付・数量表現の変換や、電話番号および人名伏字における丸記号の読み分けが正しく行われることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -636,11 +676,9 @@ def test_normalize_text_quantity_and_circle_contexts(
 
 def test_normalize_text_for_irodori_retains_pause_apostrophe():
     """
-    号室番号等のポーズ用先頭 ' は鉤括弧化せず残す。
-
-    SBV2 と同様に数字の桁区切りポーズとして使われるため、
-    ペアになっていない ' はそのまま維持する。
+    Irodori-TTS 向けにおいて、数字の桁区切りポーズとして使われる単独のアポストロフィが鉤括弧へ変換されず保持されることを確認する。
     """
+
     assert (
         normalize_text("グリーンコート赤坂409号室", for_irodori=True)
         == "グリーンコート赤坂'ヨンマルキュー号室"
@@ -649,7 +687,9 @@ def test_normalize_text_for_irodori_retains_pause_apostrophe():
 
 
 def test_normalize_text_for_irodori_dash_variants_to_halfwidth_hyphen():
-    """Irodori: ダッシュ変種は半角ハイフンへ正規化して保持する"""
+    """
+    Irodori-TTS 向けにおいて、各種ダッシュ記号が半角ハイフンへ統一されて保持されることを確認する。
+    """
 
     assert normalize_text("あ—い", for_irodori=True) == "あ-い"
     assert normalize_text("あ―い", for_irodori=True) == "あ-い"
@@ -664,7 +704,9 @@ def test_normalize_text_for_irodori_dash_variants_to_halfwidth_hyphen():
 def test_normalize_text_dash_variants_preserved_between_japanese_sbv2(
     text: str, expected: str
 ):
-    """SBV2: 日本語間のダッシュ変種は PUNCTUATIONS の半角ハイフンとして保持する"""
+    """
+    SBV2 向けにおいて、日本語文字に挟まれた各種ダッシュ記号が symbols.PUNCTUATIONS の半角ハイフンとして保持されることを確認する。
+    """
 
     assert normalize_text(text) == expected
 
@@ -676,13 +718,17 @@ def test_normalize_text_dash_variants_preserved_between_japanese_sbv2(
 def test_normalize_text_dash_variants_preserved_between_japanese_irodori(
     text: str, expected: str
 ):
-    """Irodori: 日本語間のダッシュ変種は半角ハイフンとして保持する"""
+    """
+    Irodori-TTS 向けにおいて、日本語文字に挟まれた各種ダッシュ記号が半角ハイフンとして保持されることを確認する。
+    """
 
     assert normalize_text(text, for_irodori=True) == expected
 
 
 def test_normalize_text_english_hyphenated_words_still_merge():
-    """英単語内のハイフン連結は従来通り一語として扱う"""
+    """
+    英単語同士がハイフンで連結されている場合に、分離されずに一語の英単語として連結処理されることを確認する。
+    """
 
     assert normalize_text("good-pen") == "グッドペン"
     assert normalize_text("OFDMEXA-modular") == "OFDMEXAモジュラー"
@@ -690,7 +736,9 @@ def test_normalize_text_english_hyphenated_words_still_merge():
 
 
 def test_normalize_text_for_irodori_natural_prose_integration():
-    """実際の読み上げ文に近い複合ケースを自然な日本語表記へ正規化する"""
+    """
+    実際の読み上げ文に近い複合的な入力テキストが、Irodori-TTS 向けの自然な日本語表記へ正規化されることを確認する。
+    """
 
     assert (
         normalize_text(
@@ -736,7 +784,7 @@ def test_normalize_text_laughing_w(text: str, expected: str, for_irodori: bool) 
     全角の「ｗ」は NFKC で半角になり、半角の「www」は英単語のカタカナ変換で「ウィウ」のように読まれてしまうので、どちらの経路でも先に読みへ置き換える必要がある。
     「点数ｗだけど」のように IME で打った全角の「ｗ」は、直後に日本語が続いても笑いとして読む。
     「ﾏｼﾞｗ」のように半角カタカナに続く「ｗ」も笑いとして読む。
-    「笑ったww, nice」「笑ったww、Xで見たよ。」や、次の行が英文で始まる「笑ったww.」は、後ろの英字を変数の列とみなさずに笑いとして読む。
+    「笑ったww, nice」「笑ったww、Xで見たよ。」や、次の行が英文で始まる「笑ったww.」は、後ろの英字を変数の列とみなさずに笑いとして読むことを確認する。
     """
 
     if for_irodori is True:
@@ -761,7 +809,7 @@ def test_normalize_text_laughing_w_in_brackets(
 ) -> None:
     """
     丸括弧・角括弧・波括弧の中に単独で置かれた「ｗ」を、笑いとして「ワラ」と読むことを確認する。
-    括弧そのものの変換は経路ごとに異なるので、経路ごとの出力を並べて確かめる。
+    括弧そのものの変換は経路ごとに異なるため、経路ごとの出力差を含めて意図通りに正規化されることを確認する。
     """
 
     assert normalize_text(text) == expected
@@ -808,7 +856,7 @@ def test_normalize_text_laughing_w_excludes_words_and_variables(
 ) -> None:
     """
     英単語・URL・メールアドレスの中の「w」、大文字の「W」、数字に付いた単位、オプションの「-w」は、笑いとして「ワラ」と読まないことを確認する。
-    変数の「w」も笑いにしない。半角で書いて直後に日本語が続くもの (「幅wの長方形」「幅wﾒｰﾄﾙ」)、空白の後に置いたもの (「重み w=4.25」)、比較や等号の演算子が続くもの (「w≠0」「w≦0」)、上付きや下付きの数字が続くもの (「w²」「w₁」)、1文字の英字と読点で並ぶもの (「w、x、y」) が対象である。
+    直後に日本語が続くもの (「幅wの長方形」「幅wﾒｰﾄﾙ」)、空白の後に置いたもの (「重み w=4.25」)、比較や等号の演算子が続くもの (「w≠0」「w≦0」)、上付きや下付きの数字が続くもの (「w²」「w₁」)、1文字の英字と読点で並ぶもの (「w、x、y」) などの変数「w」も笑いに変換されないことを確認する。
     """
 
     assert "ワラ" not in normalize_text(text, for_irodori=for_irodori)
@@ -850,7 +898,7 @@ def test_normalize_text_return_details_tracks_laughing_w(
 ) -> None:
     """
     笑いの「w」を「ワラ」「ワラワラ」へ置き換えた区間が、発話内容を変えた記号の区間として details に記録されることを確認する。
-    音声と照合する処理は details の区間を原表記へ戻すので、記録がないと「ワラワラ」が書き起こしに残ってしまう。
+    音声と照合する処理において原表記へ正しく復元できるよう、置換位置が正確に記録されていることを確認する。
     """
 
     result = normalize_text(text, for_irodori=for_irodori, return_details=True)
@@ -913,7 +961,7 @@ def test_normalize_text_roman_numerals(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    「Ⅱ」は「二」、「ⅩⅬ」は「四十」、型番の「ⅰC」は「iC」へ変換し、英字の「VIII」は保持
+    ローマ数字記号が漢数字へ適切に変換され、型番や通常の英字列が誤変換されず保持されることを確認する。
     """
 
     if for_irodori is True:
@@ -936,7 +984,7 @@ def test_normalize_text_roman_numeral_details(
     text: str, fragment: str, reading: str, for_irodori: bool
 ) -> None:
     """
-    「Ⅱ章」「図Ⅱ‐四十二」のローマ数字と区切りの読みを元区間つきで記録
+    ローマ数字や後続の区切りを含む表現が、元の入力区間と対応付けられて details に記録されることを確認する。
     """
 
     result = normalize_text(text, for_irodori=for_irodori, return_details=True)
@@ -974,7 +1022,7 @@ def test_normalize_text_roman_numeral_following_number_details(
     text: str, fragment: str, expected: str, irodori_expected: str, for_irodori: bool
 ) -> None:
     """
-    「図Ⅱ‐1.1」「図Ⅱ‐1〜3」「図Ⅱ‐1/128」のローマ数字と後続の数値をまとめて区間情報へ記録
+    ローマ数字とそれに続く数値や範囲・分数表現が、まとめて一つの発話区間として details に記録されることを確認する。
     """
 
     result = normalize_text(text, for_irodori=for_irodori, return_details=True)
@@ -991,10 +1039,7 @@ def test_normalize_text_roman_numeral_following_number_details(
 
 def test_normalize_text_zero_variant_characters():
     """
-    ゼロの表記揺れ文字の正規化テスト
-
-    〇 (U+3007 IDEOGRAPHIC NUMBER ZERO) の代わりに使われうる丸系 Unicode 文字を
-    正しくゼロとして認識し、漢数字変換→電話番号/郵便番号パターンにマッチさせる。
+    漢数字の「〇」の代用として使われる各種丸系文字がゼロとして認識され、電話番号や郵便番号などの数値パターンとして正しく正規化されることを確認する。
     """
 
     # --- ○ (U+25CB WHITE CIRCLE) をゼロとして使用 ---
@@ -1039,10 +1084,7 @@ def test_normalize_text_zero_variant_characters():
 
 def test_normalize_text_kanji_numeral_phone_numbers():
     """
-    漢数字で記述された電話番号の正規化テスト
-
-    漢数字（一〜九、〇）で書かれた電話番号が、半角数字版と同じ結果になることを検証する。
-    カタカナ長音記号「ー」がハイフンの代わりに使われるケースも対応する。
+    漢数字で記述された電話番号や、ハイフンの代わりに長音記号「ー」が使われた表記が、算用数字の電話番号と同じ読みへ正規化されることを確認する。
     """
 
     # --- 固定電話（漢数字 + 「ー」区切り） ---
@@ -1118,9 +1160,7 @@ def test_normalize_text_kanji_numeral_phone_numbers():
 
 def test_normalize_text_kanji_numeral_postal_codes():
     """
-    漢数字で記述された郵便番号の正規化テスト
-
-    漢数字で書かれた郵便番号が、半角数字版と同じ結果になることを検証する。
+    漢数字で記述された郵便番号が、算用数字の郵便番号と同じ読みへ正規化されることを確認する。
     """
 
     # --- 〒 付き郵便番号（漢数字 + 「ー」区切り） ---
@@ -1151,9 +1191,7 @@ def test_normalize_text_kanji_numeral_postal_codes():
 
 def test_normalize_text_kanji_numeral_addresses():
     """
-    漢数字で記述された住所番地の正規化テスト
-
-    漢数字で書かれた住所番地が、半角数字版と同じ結果になることを検証する。
+    漢数字で記述された住所番地が、算用数字の住所番地と同じ読みへ正規化されることを確認する。
     """
 
     # --- 地番形式（2要素） ---
@@ -1178,10 +1216,7 @@ def test_normalize_text_kanji_numeral_addresses():
 
 def test_normalize_text_fullwidth_digit_phone_postal_address():
     """
-    全角数字で記述された電話番号・郵便番号・住所の正規化テスト
-
-    全角数字は jaconv.z2h() により先に半角に変換されるため、
-    半角数字版と同じ結果になることを検証する。
+    全角数字で記述された電話番号・郵便番号・住所が、半角数字版と同じ読みへ正規化されることを確認する。
     """
 
     # --- 電話番号（全角数字 + 全角ハイフンマイナス） ---
@@ -1225,10 +1260,7 @@ def test_normalize_text_fullwidth_digit_phone_postal_address():
 
 def test_normalize_text_hyphen_variants_phone_postal():
     """
-    ハイフンの表記揺れ文字による電話番号・郵便番号の正規化テスト
-
-    半角ハイフン (U+002D) 以外の各種ハイフン・ダッシュ文字が
-    電話番号・郵便番号のセパレータとして正しく認識されることを検証する。
+    各種ハイフンやダッシュ記号で区切られた電話番号や郵便番号が、セパレータとして正しく認識されて正規化されることを確認する。
     """
 
     # 期待される結果（全て同一）
@@ -1270,9 +1302,7 @@ def test_normalize_text_hyphen_variants_phone_postal():
 
 def test_normalize_text_kanji_numeral_non_conversion():
     """
-    漢数字の変換が適用されないケースのテスト
-
-    単独の漢数字（熟語・漢語の一部）は変換されないことを検証する。
+    熟語や漢語の一部として用いられる単独の漢数字が、電話番号や番地として誤変換されずに保持されることを確認する。
     """
 
     # --- 漢語・熟語中の漢数字は変換されない ---
@@ -1330,7 +1360,9 @@ def test_normalize_text_kanji_numeral_non_conversion():
 
 
 def test_normalize_text_kanji_numeral_sequence_with_zero() -> None:
-    """漢数字のゼロを含む位取り表記を数値として保持する。"""
+    """
+    「二千〇二十年」「一〇八」のように漢数字のゼロを含む位取り表記が、電話番号などに誤判定されず数値として保持されることを確認する。
+    """
 
     # `〇` と非ゼロ漢数字が連続する表記は、伏せ字の丸ではなく各桁を表す数字列
     assert normalize_text("成功率七〇％", for_irodori=True) == "成功率70パーセント"
@@ -1370,7 +1402,7 @@ def test_normalize_text_kanji_decimal_point(
     """
     「五十九．二％」のように漢数字に挟まれた全角の「．」が句点として扱われて「テン」が消えないよう、
     「五十九点二」と小数点を書き換えることを確認する。
-    「平成十三．四．六」のような日付や「十二．曲名」のような項目番号の「．」は小数点にしない。
+    「平成十三．四．六」のような日付や「十二．曲名」のような項目番号の「．」は、小数点に変換されないことを確認する。
     """
 
     if for_irodori is True:
@@ -1380,11 +1412,7 @@ def test_normalize_text_kanji_decimal_point(
 
 def test_normalize_text_circle_to_maru() -> None:
     """
-    数値コンテキスト外の丸系文字（〇, ○, ◯, ⭕, ⚪ 等）が「マル」として読まれることを検証する。
-
-    電話番号・郵便番号・住所等の数値コンテキスト内の〇は半角 0 に変換され、
-    数値として正しく読み上げられる。一方、それ以外の文脈で使われる丸系文字は
-    「マル」に変換され、ふせ字（伏せ字）やプレースホルダーとして読まれる。
+    電話番号や住所などの数値コンテキスト外にある丸系文字（〇、○、◯、⭕、⚪ 等）が、伏字やプレースホルダーの「マル」として読まれることを確認する。
     """
 
     # --- 基本的なふせ字・伏せ字 ---
@@ -1434,7 +1462,10 @@ def test_normalize_text_circle_to_maru() -> None:
 
 
 def test_normalize_text_url_email():
-    """URL・メールアドレス関連の正規化のテスト"""
+    """
+    URL やメールアドレスが、スキーム・ドメイン・記号を含めて適切なカタカナ読みへ正規化されることを確認する。
+    """
+
     # URL
     assert (
         normalize_text("https://example.com")
@@ -1474,7 +1505,10 @@ def test_normalize_text_url_email():
 
 
 def test_normalize_text_divider_blocks():
-    """区切り用途の連続記号を句点に畳み込むテスト"""
+    """
+    装飾や境界線として用いられる連続記号ブロックが、句点へ畳み込まれて適切に区切られることを確認する。
+    """
+
     assert normalize_text("###########") == "."
     assert normalize_text("-------------") == "."
     assert normalize_text("_____   _____") == "."
@@ -1543,8 +1577,8 @@ def test_normalize_text_open_ended_number_ranges(
     text: str, expected: str, expected_irodori: str, wave_dash: str, for_irodori: bool
 ) -> None:
     """
-    数量・金額・時刻・日付に続き、終点が省略された波ダッシュを「から」に書き換える。
-    小数や句読点は、それぞれの正規化処理での表記を保つ。
+    数量・金額・時刻・日付に続き、終点が省略された波ダッシュが「から」に書き換えられることを確認する。
+    小数や句読点については、それぞれの正規化処理での表記が保たれることを確認する。
     """
 
     assert normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori) == (
@@ -1578,7 +1612,7 @@ def test_normalize_text_open_ended_mixed_and_decimal_numbers(
     text: str, expected: str, expected_irodori: str, wave_dash: str, for_irodori: bool
 ) -> None:
     """
-    単位のない混在表記や漢数字の小数も数量の範囲として読み、助詞の前は長音を保つ。
+    単位のない混在表記や漢数字の小数が数量の範囲として「から」に変換され、助詞の前では長音記号が保持されることを確認する。
     """
 
     assert normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori) == (
@@ -1613,7 +1647,7 @@ def test_normalize_text_open_ended_rates_and_half_durations(
     text: str, expected: str, wave_dash: str, for_irodori: bool
 ) -> None:
     """
-    毎秒・毎時への単位展開と「半」を含む期間にも数量の範囲を適用する。
+    「毎秒」「毎時」などのレート単位や「半」を含む期間表現の後ろの波ダッシュが、数量の範囲として「から」へ変換されることを確認する。
     """
 
     assert (
@@ -1642,7 +1676,7 @@ def test_normalize_text_open_ended_ranges_before_closing_quotes(
     text: str, expected: str, expected_irodori: str, wave_dash: str, for_irodori: bool
 ) -> None:
     """
-    閉じ引用符の前でも数量の範囲は「から」と読み、語尾や助詞の前の長音は保つ。
+    閉じ引用符の直前にある数量の波ダッシュが「から」と読まれ、語尾や助詞の前の長音はそのまま保持されることを確認する。
     """
 
     assert normalize_text(text.replace("〜", wave_dash), for_irodori=for_irodori) == (
@@ -1689,7 +1723,7 @@ def test_normalize_text_open_ended_range_details(
     for_irodori: bool,
 ) -> None:
     """
-    数量から波ダッシュまでを一つの数値区間として記録し、単位や日付の展開結果にも対応付ける。
+    数量から終点省略の波ダッシュまでが一つの数値区間として details に記録され、単位や日付の展開結果にも正しく対応付けられることを確認する。
     """
 
     text = text.replace("〜", wave_dash)
@@ -1718,7 +1752,7 @@ def test_normalize_text_open_ended_range_details_preserve_context(
     for_irodori: bool,
 ) -> None:
     """
-    複数の範囲をそれぞれ記録し、助詞の前や数量でない語尾の長音は範囲の区間から外す。
+    文中に複数の範囲表現が含まれる場合にそれぞれが独立して記録され、助詞の前や数量ではない語尾の長音は範囲の区間から除外されることを確認する。
     """
 
     text = "予算100円〜、受付10:30〜。月1度～の方針、よろしく〜"
@@ -1741,13 +1775,16 @@ def test_normalize_text_range_details_normalizes_linear_amount_of_text(
     monkeypatch: pytest.MonkeyPatch, count: int, for_irodori: bool
 ) -> None:
     """
-    番号付きの語が繰り返されても、区間情報の再変換量は入力長に比例する範囲に抑える。
-    実行時間のばらつきに依存せず、再変換した文字数と全区間の位置を検証する。
+    番号付きの語が多数繰り返された場合でも、区間情報の再変換量が入力長に対して線形に抑えられ、全区間の位置が正しく検証されることを確認する。
     """
 
     normalized_character_count = 0
 
     def normalize_fragment(text: str, for_irodori: bool = False) -> str:
+        """
+        正規化した文字数をカウントしながらテキストを正規化する。
+        """
+
         nonlocal normalized_character_count
         normalized_character_count += len(text)
         return normalize_text(text, for_irodori=for_irodori)
@@ -1776,7 +1813,10 @@ def test_normalize_text_range_details_normalizes_linear_amount_of_text(
 
 
 def test_normalize_text_ranges():
-    """範囲表現の正規化のテスト"""
+    """
+    数量・時刻・日付・金額などの両端が指定された範囲表現において、波ダッシュ各種が「から」へ適切に正規化されることを確認する。
+    """
+
     # 数値範囲
     assert normalize_text("1〜10") == "1から10"
     assert normalize_text("1~10") == "1から10"
@@ -1813,7 +1853,10 @@ def test_normalize_text_ranges():
     ],
 )
 def test_normalize_text_mixed_number_ranges(text: str, expected: str) -> None:
-    """数値+日本語単位から一般語へ続く波ダッシュ範囲の正規化テスト"""
+    """
+    数値と日本語単位から一般語へと続く波ダッシュの範囲表現が、長音記号にならず「から」へ正規化されることを確認する。
+    """
+
     assert normalize_text(text) == expected
 
 
@@ -1860,7 +1903,7 @@ def test_normalize_text_kanji_number_ranges(
     """
     「六〜八メートル」「二十九〜三十一」のように漢数字を含む数の範囲の「〜」が長音の「ー」に変わり、
     「ロクーハチ」や「ニジューキュウー」のように前の母音を伸ばして読まれないよう、「から」に書き換えることを確認する。
-    「受付時間は2〜3時」のような時刻の範囲を2つの時刻の列挙と取り違えないよう、1ずつ違う数どうしの範囲も「から」でつなぐ。
+    「受付時間は2〜3時」のような時刻の範囲を2つの時刻の列挙と取り違えないよう、1ずつ違う数どうしの範囲も「から」でつなぐことを確認する。
     """
 
     if for_irodori is True:
@@ -1944,14 +1987,20 @@ def test_normalize_text_wave_dash_not_converted_to_range(
     expected: str,
     for_irodori: bool,
 ) -> None:
-    """波ダッシュが誤って「から」に変換されないケースの回帰テスト"""
+    """
+    語尾の伸ばしや感情表現として使われる波ダッシュが、誤って範囲の「から」へ変換されず長音記号として保持されることを確認する。
+    """
+
     if for_irodori is True:
         expected = expected.replace("!", "！")
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
 def test_normalize_text_mathematical():
-    """数学記号関連の正規化のテスト"""
+    """
+    四則演算子や等号・不等号などの各種数学記号が、数式文脈において適切な日本語の読みへ正規化されることを確認する。
+    """
+
     # 数学記号
     assert normalize_text("∞") == "無限大"
     assert normalize_text("π") == "パイ"
@@ -2091,7 +2140,10 @@ def test_normalize_text_equals_sign_with_brackets(
 
 
 def test_normalize_text_dates():
-    """日付関連の正規化のテスト"""
+    """
+    西暦・和暦・スラッシュ区切り・ドット区切りなどの各種日付表現が、適切な日本語の日付読みへ正規化されることを確認する。
+    """
+
     # 様々な日付形式
     assert normalize_text("2024/01/01") == "2024年1月1日"
     assert normalize_text("2024-01-01") == "2024年1月1日"
@@ -2222,7 +2274,10 @@ def test_normalize_text_dates():
 
 
 def test_normalize_text_time():
-    """時刻関連の正規化のテスト"""
+    """
+    コロン区切りの時刻表記や午前・午後を伴う時刻表現が、適切な日本語の時刻読みへ正規化されることを確認する。
+    """
+
     # 基本的な時刻表現
     assert normalize_text("9時3分") == "九時3分"
     assert normalize_text("9時4分") == "九時4分"
@@ -2421,13 +2476,17 @@ def test_normalize_text_duration_timestamp_and_related_patterns(
     expected: str,
 ) -> None:
     """
-    連続時間表記・タイムスタンプ・経過時間・混合範囲・記号的減算の回帰テスト。
+    連続時間表記、タイムスタンプ、経過時間、混合範囲、記号的減算の各パターンが適切に正規化されることを確認する。
     """
+
     assert normalize_text(text) == expected
 
 
 def test_normalize_text_duration_timestamp_in_context() -> None:
-    """連続時間表記とタイムスタンプが文中に埋まっている場合の回帰テスト"""
+    """
+    連続時間表記やタイムスタンプが文中に埋め込まれている場合に、前後の文脈を壊さず正しく正規化されることを確認する。
+    """
+
     assert normalize_text("経過1h25m23sでゴール") == "経過1時間25分23秒でゴール"
     assert (
         normalize_text("経過時間は00:34:05.101です") == "経過時間は零時34分5秒101です"
@@ -2448,12 +2507,18 @@ def test_normalize_text_duration_timestamp_for_irodori(
     text: str,
     expected: str,
 ) -> None:
-    """Irodori 経路でも同じ正規化結果になること"""
+    """
+    時間表記およびタイムスタンプの正規化が、Irodori-TTS 向けの経路でも同様に正しく行われることを確認する。
+    """
+
     assert normalize_text(text, for_irodori=True) == expected
 
 
 def test_normalize_text_duration_timestamp_negative_cases() -> None:
-    """今回のルールが誤発火しないことの回帰テスト"""
+    """
+    時間表記やタイムスタンプの正規化ルールが、比率や型番などの非時間表現に対して誤適用されないことを確認する。
+    """
+
     # 両側が数字の範囲は従来の数値範囲変換を維持する
     assert normalize_text("100m〜200m") == "100メートルから200メートル"
     # 小数秒のない時刻・アスペクト比は従来どおり
@@ -2464,7 +2529,10 @@ def test_normalize_text_duration_timestamp_negative_cases() -> None:
 
 
 def test_normalize_text_fractions():
-    """分数関連の正規化のテスト (明確に日付ではないパターンのみ分数として読まれる)"""
+    """
+    日付と誤認されない文脈において、スラッシュ表記の分数が「○分の○」という日本語の分数読みへ正規化されることを確認する。
+    """
+
     assert normalize_text("123/456") == "四百五十六ぶんの百二十三"
     assert normalize_text("1/100") == "百ぶんの一"
     assert normalize_text("13/32") == "三十二ぶんの十三"
@@ -2528,19 +2596,21 @@ def test_normalize_text_quantity_fractions(
 
 def test_normalize_text_phone_numbers():
     """
-    電話番号の正規化のテスト
+    市外局番や携帯電話番号などの電話番号表記が、ハイフン位置に応じた桁ごとのカタカナ読みや読点による区切りへ正規化されることを確認する。
 
-    電話番号の数字は1桁ずつカタカナ読みに変換される。
+    電話番号の数字は 1 桁ずつカタカナ読みに変換される。
     読み方のルール:
-      0→ゼロ, 1→イチ, 2→ニー, 3→サン, 4→ヨン, 5→ゴー,
-      6→ロク, 7→ナナ, 8→ハチ, 9→キュー
+      0→ゼロ、1→イチ、2→ニー、3→サン、4→ヨン、5→ゴー、
+      6→ロク、7→ナナ、8→ハチ、9→キュー。
     ハイフン区切りは読点「,」に変換される（TTS でポーズになる）。
 
-    3桁グループの末尾ルール:
-      1モーラの数字（2, 5）がグループ末尾に来る場合、伸ばさずに短く読む。
-      例: 045→ゼロヨンゴ（末尾5はゴ）、052→ゼロゴーニ（末尾2はニ、中間5はゴー）
-      ただし2桁グループや4桁グループの末尾では通常通り伸ばす。
-      例: 03→ゼロサン、0X-12→イチニー（2桁末尾は伸ばす）
+    3 桁グループの末尾ルール:
+      1 モーラの数字（2, 5）がグループ末尾に来る場合、伸ばさずに短く読む。
+      例: 045→ゼロヨンゴ（末尾 5 はゴ）、052→ゼロゴーニ（末尾 2 はニ、中間 5 はゴー）。
+      ただし 2 桁グループや 4 桁グループの末尾では通常通り伸ばす。
+      例: 03→ゼロサン、0X-12→イチニー（2 桁末尾は伸ばす）。
+
+    これらの規則に基づき、各種電話番号が適切に読み上げ用テキストへ正規化されることを確認する。
     """
 
     # --- 固定電話（ハイフン区切り） ---
@@ -2776,18 +2846,20 @@ def test_normalize_text_dotted_and_parenthesized_phone_numbers(
 
 def test_normalize_text_postal_codes():
     """
-    郵便番号の正規化のテスト
+    「〒」記号や「3 桁-4 桁」の郵便番号表記が、ハイフンの「の」への置換や前 3 桁中間ゼロの「マル」読みを含め、適切なカタカナ読みへ正規化されることを確認する。
 
-    郵便番号は「3桁-4桁」の形式。数字は1桁ずつカタカナ読み。
+    郵便番号は「3 桁-4 桁」の形式であり、数字は 1 桁ずつカタカナ読みされる。
     ハイフンは「の」に変換される。
     「〒」記号は normalizer.py の __SYMBOL_YOMI_MAP により「郵便番号」に変換される。
     読み方のルール:
-      0→ゼロ, 1→イチ, 2→ニー, 3→サン, 4→ヨン, 5→ゴー,
-      6→ロク, 7→ナナ, 8→ハチ, 9→キュー
-    前3桁の中間0の読み方:
-      3桁が X0Y（Y≠0）の形の場合、中間の 0 は「マル」と読む。
-      例: 304→サンマルヨン, 802→ハチマルニー
-      ただし末尾が 0 の場合はゼロのまま。例: 100→イチゼロゼロ
+      0→ゼロ、1→イチ、2→ニー、3→サン、4→ヨン、5→ゴー、
+      6→ロク、7→ナナ、8→ハチ、9→キュー。
+    前 3 桁の中間 0 の読み方:
+      3 桁が X0Y（Y≠0）の形の場合、中間の 0 は「マル」と読む。
+      例: 304→サンマルヨン、802→ハチマルニー。
+      ただし末尾が 0 の場合はゼロのままとする。例: 100→イチゼロゼロ。
+
+    これらの規則に基づき、各種郵便番号が適切に読み上げ用テキストへ正規化されることを確認する。
     """
 
     # --- 〒 付き郵便番号 ---
@@ -2835,22 +2907,23 @@ def test_normalize_text_postal_codes():
 
 def test_normalize_text_addresses():
     """
-    住所番地の正規化のテスト
+    地名に続く住所番地表記において、ハイフンの「の」への置換や 3 桁以上の部屋番号の桁読みなど、住所文脈に即したカタカナ読みへ正規化されることを確認する。
 
-    漢字地名の直後にある「数字-数字(-数字)(-数字)」パターンを住所番地として検出。
+    漢字地名の直後にある「数字-数字(-数字)(-数字)」パターンを住所番地として検出する。
     ハイフンは「の」に変換される。
-    各要素のうち2桁以下はそのまま（pyopenjtalk が通常読み）、
-    4要素目が3桁以上の場合は部屋番号として桁読み。
+    各要素のうち 2 桁以下はそのまま（pyopenjtalk が通常読み）とし、4 要素目が 3 桁以上の場合は部屋番号として桁読みする。
     部屋番号の桁読みルール:
-      0→ゼロ（先頭・末尾）/ マル（3桁の中間のみ）
-      1→イチ, 2→ニー, 3→サン, 4→ヨン, 5→ゴー,
-      6→ロク, 7→ナナ, 8→ハチ, 9→キュー
-      3桁の中間0は「マル」と読むが、4桁以上の中間0は「ゼロ」と読む。
-      例: 409→ヨンマルキュー, 1203→イチニーゼロサン
+      0→ゼロ（先頭・末尾）/ マル（3 桁の中間のみ）。
+      1→イチ、2→ニー、3→サン、4→ヨン、5→ゴー、
+      6→ロク、7→ナナ、8→ハチ、9→キュー。
+      3 桁の中間 0 は「マル」と読むが、4 桁以上の中間 0 は「ゼロ」と読む。
+      例: 409→ヨンマルキュー、1203→イチニーゼロサン。
     号室末尾は伸ばさない:
-      部屋番号の末尾が 2 または 5 の場合、短く読む（ニ, ゴ）。
-      住所の最後なので韻を踏む必要がないため。
-      例: 205→ニーマルゴ, 202→ニーマルニ
+      部屋番号の末尾が 2 または 5 の場合、短く読む（ニ、ゴ）。
+      住所の最後なので韻を踏む必要がないためである。
+      例: 205→ニーマルゴ、202→ニーマルニ。
+
+    これらの規則に基づき、各種住所表記が適切に読み上げ用テキストへ正規化されることを確認する。
     """
 
     # --- 地番形式の住所（地番-枝番: 2要素） ---
@@ -2992,13 +3065,15 @@ def test_normalize_text_addresses():
 
 def test_normalize_text_room_number_digit_patterns():
     """
-    部屋番号の桁読みテスト: 多様な数字パターンでの期待値をハードコードで検証する。
+    部屋番号の桁読みにおいて、3 桁と 4 桁での中間ゼロの読み分け（マル・ゼロ）や末尾の 1 モーラ数字（2、5）の短縮読みなど、多様な桁パターンが正しく正規化されることを確認する。
 
     特に以下のパターンを重点的にカバーする:
-    - 3桁 vs 4桁で中間0の読み方が異なる（マル vs ゼロ）
-    - 1モーラ数字（2, 5）の末尾での短縮（ニー→ニ, ゴー→ゴ）
-    - 連続する0の扱い（ゼロゼロ）
-    - 先頭・末尾0の読み方（ゼロ）
+    - 3 桁 vs 4 桁で中間 0 の読み方が異なる（マル vs ゼロ）。
+    - 1 モーラ数字（2, 5）の末尾での短縮（ニー→ニ、ゴー→ゴ）。
+    - 連続する 0 の扱い（ゼロゼロ）。
+    - 先頭・末尾 0 の読み方（ゼロ）。
+
+    これらのパターンが意図通りに桁読みへ正規化されることを確認する。
     """
 
     # ========== 3桁の部屋番号: 中間0→マル ==========
@@ -3107,8 +3182,7 @@ def test_normalize_text_room_number_digit_patterns():
 
 def test_normalize_text_standalone_address_false_positive():
     """
-    __ADDRESS_STANDALONE_4PART_PATTERN / __ADDRESS_STANDALONE_3PART_WITH_ROOM_PATTERN が
-    住所ではない数字列パターンに誤マッチしないことを検証する。
+    地名を伴わない一般的な数字の列や計算式などが、誤って独立した住所番地パターンとして判定されないことを確認する。
     """
 
     # --- X-Y-Z-NNN（4要素）の非住所パターン ---
@@ -3159,11 +3233,7 @@ def test_normalize_text_standalone_address_false_positive():
 
 def test_normalize_text_gou_false_positive_composite():
     """
-    同一テキスト内に住所文脈と非住所の NNN号 が混在するケースで、
-    非住所部分の NNN号 が桁読みに誤変換されないことを検証する。
-
-    has_address_context() の160文字窓により、前方の住所文脈が
-    後方の非住所「号」に波及する偽陽性を検出する。
+    同一文中に住所表記と非住所の号数表記が混在する場合に、前方の住所文脈が後方の非住所の「号」へ波及して誤って部屋番号として桁読みされないことを確認する。
     """
 
     # 住所 → 列車号数: 住所文脈が列車号数に波及する
@@ -3201,14 +3271,7 @@ def test_normalize_text_gou_false_positive_composite():
 
 def test_normalize_text_gou_false_positive_sentence_boundary():
     """
-    文境界文字による住所文脈の遮断テスト。
-
-    has_address_context() は __replace_symbols() 内から呼び出され、
-    replace_punctuation() よりも先に実行される。
-    jaconv.z2h() は先に実行済みのため「！→!」「？→?」「：→:」は半角に変換済み。
-    一方「。」(U+3002) は CJK 句読点のため z2h では変換されず、そのまま残っている。
-    そのため「。」と半角「.!?:」の両方を文境界として検出する。
-    最終出力では replace_punctuation() により「。→.」「:→,」等に変換される。
+    句点や感嘆符などの文境界文字を挟んだ場合に、直前の住所文脈が遮断され、後続の文にある非住所の「号」が部屋番号として誤変換されないことを確認する。
     """
 
     # 「。」で住所文脈が遮断される（最終出力では「.」になる）
@@ -3255,10 +3318,7 @@ def test_normalize_text_gou_false_positive_sentence_boundary():
 
 def test_normalize_text_floor_notation():
     """
-    フロア表記（NF, BNF）の正規化のテスト
-
-    「3F」→「3階」、「B1F」→「地下1階」のように変換される。
-    エレベーターのボタンやビル案内でよく使われる表記。
+    「3F」や「B1F」などのフロア階数表記が、「3階」や「地下1階」といった自然な日本語の階数表記へ正規化されることを確認する。
     """
 
     # --- 基本的なフロア表記 ---
@@ -3301,7 +3361,9 @@ def test_normalize_text_floor_notation():
 
 
 def test_normalize_text_phone_postal_address_combined():
-    """電話番号・郵便番号・住所の複合パターンのテスト"""
+    """
+    電話番号・郵便番号・住所番地が同一テキスト内に連続または混在して出現する場合に、各パターンが互いに干渉せず正しく正規化されることを確認する。
+    """
 
     # 顧客の実用的な利用シーン: クリニック情報の読み上げ
     assert (
@@ -3357,7 +3419,9 @@ def test_normalize_text_phone_postal_address_combined():
 
 
 def test_normalize_text_phone_postal_address_edge_cases():
-    """電話番号・郵便番号・住所に関するエッジケースのテスト"""
+    """
+    電話番号・郵便番号・住所表記における境界値や特殊な区切り記号などのエッジケースが、意図通りに正規化または非変換として処理されることを確認する。
+    """
 
     # --- 数式との区別 ---
     # 既存の数式処理: イコールが数字の間にあるので数式コンテキスト
@@ -3469,12 +3533,7 @@ def test_normalize_text_phone_postal_address_edge_cases():
 
 def test_normalize_text_address_marker_propagation_prevention():
     """
-    住所マーカーの伝播防止テスト。
-
-    住所変換後のマーカー以降に助詞を含む文構造テキストがある場合、
-    住所文脈として扱わないことを検証する。
-    __ADDRESS_MARKER_TAIL_PATTERN により、ひらがな（「の」以外）を含む
-    テキストは建物名ではなく文構造と判定される。
+    住所変換後のマーカー以降に助詞を含む文構造テキストが続く場合に、住所文脈が後続へ不適切に伝播しないことを確認する。
     """
 
     # マーカー後に助詞「で」を含む文構造テキスト → 住所文脈ではない
@@ -3526,11 +3585,7 @@ def test_normalize_text_address_marker_propagation_prevention():
 
 def test_normalize_text_building_brand_names():
     """
-    大手デベロッパーブランド名による建物名判定テスト。
-
-    __BUILDING_NAME_PATTERN に登録されたブランド名が、
-    建物名キーワード近接チェック（check 5: distance_from_end <= 2）で
-    正しく検出されることを検証する。
+    主要なマンション・ビルブランド名が建物名として認識され、後続する部屋番号の「号」が適切に桁読みへ正規化されることを確認する。
     """
 
     # 野村不動産: プラウド
@@ -3602,7 +3657,9 @@ def test_normalize_text_building_brand_names():
 
 
 def _convert_room_digits_for_expected(digits: str) -> str:
-    """号室・部屋番号の期待値生成用ヘルパー。"""
+    """
+    号室・部屋番号の期待値文字列を生成する。
+    """
 
     digit_to_katakana = {
         "0": "ゼロ",
@@ -3650,7 +3707,9 @@ def _convert_room_digits_for_expected(digits: str) -> str:
 
 
 def _build_room_context_positive_cases() -> list[tuple[str, str]]:
-    """住所 + 建物名 + 号 / 号室 の大量ケースを生成する。"""
+    """
+    住所、建物名、号室が組み合わさったテストケースの一覧を生成する。
+    """
 
     address_cases = [
         ("神奈川県川崎市幸区鹿島田1-34-5", "神奈川県川崎市幸区鹿島田1の34の5"),
@@ -3725,7 +3784,9 @@ def _build_room_context_positive_cases() -> list[tuple[str, str]]:
 
 
 def _build_room_context_negative_cases() -> list[tuple[str, str]]:
-    """住所文脈がない 号 の非変換ケースを大量生成する。"""
+    """
+    住所文脈を持たない「号」の非変換テストケースの一覧を生成する。
+    """
 
     prefixes = [
         "こだま",
@@ -3788,7 +3849,9 @@ def _build_room_context_negative_cases() -> list[tuple[str, str]]:
     _build_room_context_positive_cases(),
 )
 def test_normalize_text_room_context_positive_massive(text: str, expected: str):
-    """住所文脈ありの 号 / 号室 の正規化を大量ケースで検証する。"""
+    """
+    住所文脈を伴う「号」「号室」の表記が、多様な組み合わせにおいて部屋番号の桁読みへ正しく正規化されることを確認する。
+    """
 
     assert normalize_text(text) == expected
 
@@ -3798,14 +3861,16 @@ def test_normalize_text_room_context_positive_massive(text: str, expected: str):
     _build_room_context_negative_cases(),
 )
 def test_normalize_text_room_context_negative_massive(text: str, expected: str):
-    """住所文脈なしの 号 の誤変換を大量ケースで検証する。"""
+    """
+    住所文脈を持たない文章中の「号」表記が、誤って部屋番号の桁読みへ変換されないことを確認する。
+    """
 
     assert normalize_text(text) == expected
 
 
 def test_normalize_text_address_without_admin_name_wontfix():
     """
-    行政区画名なしの住所で号が変換されない挙動の意図的な非変換テスト。
+    市区町村名などの行政区画名を伴わない住所表記において、一般語との誤判定を防ぐために「号」が桁読みされない仕様通りの挙動を確認する。
 
     「赤坂1-2-3 309号」のように市区町村を省略した住所表記では、
     住所変換マーカーは付与されるが、マーカー直後のテキストが空（スペースのみ）のため、
@@ -3829,6 +3894,8 @@ def test_normalize_text_address_without_admin_name_wontfix():
     3. 建物名がある場合は正しく変換される:
        「赤坂1-2-3 パークハイム 309号」のように建物名を伴う場合は、
        マーカー後テキストの厳格パターン検証を通過し、正しく変換される。
+
+    これらの理由から、行政区画名のない住所表記において「号」が桁読みされない仕様通りの挙動を確認する。
     """
 
     # 行政区画名なし + 号（5c パス: has_address_context 必要）→ 変換されない
@@ -3865,11 +3932,7 @@ def test_normalize_text_address_without_admin_name_wontfix():
 
 def _build_gou_false_positive_admin_kanji_cases() -> list[tuple[str, str]]:
     """
-    行政区画漢字（都道府県市区町村）を含むが住所文脈ではない文で、
-    NNN号 が桁読みに誤変換されないことを検証するケースを生成する。
-
-    has_address_context() の __ADDRESS_CONTEXT_PATTERN が単漢字マッチのため、
-    「市場」「区別」「北海道」等の非住所語に含まれる漢字で偽陽性が発生する。
+    行政区画に用いられる漢字を含みつつ住所文脈ではない文章において、「号」が誤変換されないことを検証するためのテストケース一覧を生成する。
     """
 
     # {num} に数字を埋め込み、{num}号 が変換されないことを確認する
@@ -3942,11 +4005,7 @@ def _build_gou_false_positive_admin_kanji_cases() -> list[tuple[str, str]]:
 
 def _build_gou_false_positive_building_keyword_cases() -> list[tuple[str, str]]:
     """
-    建物名キーワード（タワー, ビル, 館 等）を含むが住所文脈ではない文で、
-    NNN号 が桁読みに誤変換されないことを検証するケースを生成する。
-
-    has_address_context() の __BUILDING_NAME_PATTERN が部分一致のため、
-    「東京タワー」「体育館」「ビルド」等の非建物名語に含まれるキーワードで偽陽性が発生する。
+    建物名キーワードを含みつつ住所文脈ではない文章において、「号」が誤変換されないことを検証するためのテストケース一覧を生成する。
     """
 
     templates = [
@@ -3992,7 +4051,9 @@ def test_normalize_text_gou_false_positive_admin_kanji(
     text: str,
     expected: str,
 ):
-    """行政区画漢字を含む非住所文で NNN号 が誤変換されないことを検証する。"""
+    """
+    行政区画に用いられる漢字を含む非住所文脈において、「号」表記が誤って部屋番号の桁読みへ変換されないことを確認する。
+    """
 
     assert normalize_text(text) == expected
 
@@ -4005,18 +4066,22 @@ def test_normalize_text_gou_false_positive_building_keywords(
     text: str,
     expected: str,
 ):
-    """建物名キーワードを含む非住所文で NNN号 が誤変換されないことを検証する。"""
+    """
+    建物名キーワードを含む非住所文脈において、「号」表記が誤って部屋番号の桁読みへ変換されないことを確認する。
+    """
 
     assert normalize_text(text) == expected
 
 
 def test_normalize_text_cross_mark_context_dependent() -> None:
     """
-    × 系文字（×, ✖, ⨯, ❌）が文脈に応じて「かける」と「バツ」に読み分けられることを検証する。
+    「×」などの各種バツ記号について、前後の文字種（漢字・カタカナ・数字・英字）に応じて「かける」と「バツ」へ適切に読み分けられることを確認する。
 
-    ヒューリスティック:
-      × の両側が漢字・カタカナ・数字・アルファベットの場合 → 「かける」
-      それ以外（ひらがな・空白・句読点・文頭文末等） → 「バツ」
+    判定ルール:
+      × の両側が漢字・カタカナ・数字・アルファベットの場合 → 「かける」。
+      それ以外（ひらがな・空白・句読点・文頭文末等） → 「バツ」。
+
+    これらの条件に従い、文脈に応じた適切な読みへ正規化されることを確認する。
     """
 
     # --- 「かける」になるケース: 両側が漢字・カタカナ・数字・アルファベット ---
@@ -4076,13 +4141,17 @@ def test_normalize_text_cross_mark_context_dependent() -> None:
 def test_normalize_reciprocal_compound_units(
     text: str, expected: str, for_irodori: bool
 ) -> None:
-    """複合単位の負の1乗を「マイ」で読み、元の数量と単位の関係を保つ。"""
+    """
+    複合単位の負の1乗表記が「マイ」を伴う読みへ変換され、元の数量と単位の関係が保たれて正規化されることを確認する。
+    """
 
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
 def test_reciprocal_compound_unit_replacement_details() -> None:
-    """複合単位の読み替えを、元の単位表記と対応する区間で返す。"""
+    """
+    複合単位の読み替えにおいて、元の単位表記と対応する区間が details に正確に記録されて返されることを確認する。
+    """
 
     result = normalize_text("5mL・kg−1・min−1", return_details=True)
     assert [
@@ -4105,7 +4174,9 @@ def test_reciprocal_compound_unit_replacement_details() -> None:
 def test_reciprocal_compound_units_keep_time_unit_readings(
     text: str, expected: str, for_irodori: bool
 ) -> None:
-    """正規化した単位を時間の読みで発音し、「分」の「ブン」への分割を避ける。"""
+    """
+    複合単位に含まれる時間単位が適切な時間の読みで発音され、「分」が不自然に分割されずに正規化されることを確認する。
+    """
 
     normalized = normalize_text(text, for_irodori=for_irodori)
     assert (
@@ -4117,7 +4188,9 @@ def test_reciprocal_compound_units_keep_time_unit_readings(
 
 
 def test_reciprocal_compound_unit_rejects_other_exponents() -> None:
-    """「マイ」を使った読み替えの対象を、既知の単位の負の1乗に限定する。"""
+    """
+    「マイ」を用いた読み替えの対象が既知の単位の負の1乗に限定され、その他の指数表記には適用されないことを確認する。
+    """
 
     for text in ["mL・kg−10", "mL・kg−1.5", "xml・kg−1"]:
         assert "マイ" not in normalize_text(text)
@@ -4146,8 +4219,7 @@ def test_normalize_text_kaomoji(
     text: str, expected: str, expected_irodori: str, for_irodori: bool
 ) -> None:
     """
-    括弧に囲まれた顔文字の目・口・手を除去する。
-    括弧はポーズ表現として残し、前後の数字は分けて読む。
+    括弧に囲まれた顔文字の構成要素（目・口・手など）が除去され、括弧がポーズ表現として維持された上で前後の語句が正規化されることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -4190,7 +4262,7 @@ def test_normalize_text_kaomoji_non_targets(
     text: str, expected: str, expected_irodori: str, for_irodori: bool
 ) -> None:
     """
-    英数字を含む不等式や、顔文字の目と口が揃わない記号の読みを保つ。
+    英数字を含む不等式や、顔文字の構成要件を満たさない記号列が誤って顔文字として除去されず、本来の読みが保たれることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -4222,7 +4294,7 @@ def test_normalize_text_kaomoji_keeps_following_katakana_words(
     text: str, expected: str, expected_irodori: str, for_irodori: bool
 ) -> None:
     """
-    顔文字に続くカタカナ語の先頭を保ち、単独の「ノ」「ﾉ」は顔文字の手として除去する。
+    顔文字の直後に続くカタカナ語の先頭文字が保持され、手として使われている単独の「ノ」や「ﾉ」のみが適切に除去されることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -4231,7 +4303,10 @@ def test_normalize_text_kaomoji_keeps_following_katakana_words(
 
 
 def test_normalize_text_symbols():
-    """記号関連の正規化のテスト"""
+    """
+    矢印記号や特殊記号などの各種記号が、文脈に合わせた適切なカタカナ読みへ正規化されることを確認する。
+    """
+
     # 基本的な記号
     assert normalize_text("@") == "@"
     assert normalize_text("＠") == "@"
@@ -4266,7 +4341,10 @@ def test_normalize_text_symbols():
 
 
 def test_normalize_text_currency():
-    """通貨関連の正規化のテスト"""
+    """
+    円・ドル・ユーロ・ポンドなどの各種通貨記号を伴う金額表記が、適切な日本語の読みへ正規化されることを確認する。
+    """
+
     # 各種通貨記号
     assert normalize_text("$100") == "100ドル"
     assert normalize_text("¥100") == "100円"
@@ -4297,7 +4375,10 @@ def test_normalize_text_currency():
 
 
 def test_normalize_text_units():
-    """単位関連の正規化のテスト"""
+    """
+    長さ・重さ・体積・速度・データ容量などの各種単位記号が、数値と組み合わさった際に適切な日本語の読みへ正規化されることを確認する。
+    """
+
     # ページ数表記
     assert normalize_text("40pをご覧ください。") == "40ページをご覧ください."
     assert normalize_text("本文は28p、資料は40p、付録は128pです。") == (
@@ -4591,7 +4672,9 @@ def test_normalize_text_units():
     ],
 )
 def test_normalize_text_degree_units(text: str, expected: str):
-    """温度・角度の度数表記を口頭読みの「度」へ正規化する"""
+    """
+    摂氏・華氏や角度などの度数表記が、口頭読みの「度」へ適切に正規化されることを確認する。
+    """
 
     assert normalize_text(text) == expected
 
@@ -4611,13 +4694,18 @@ def test_normalize_text_degree_units(text: str, expected: str):
     ],
 )
 def test_normalize_text_degree_units_for_irodori(text: str, expected: str):
-    """Irodori-TTS 向けでも温度・角度の度数表記を同じ読みへ正規化する"""
+    """
+    Irodori-TTS 向けにおいても、摂氏・華氏や角度などの度数表記が同じ読みへ適切に正規化されることを確認する。
+    """
 
     assert normalize_text(text, for_irodori=True) == expected
 
 
 def test_normalize_text_chemical_formula_like_words():
-    """化学式風の英数字トークンの正規化のテスト"""
+    """
+    化学式風の英数字表記において、元素記号や数値が崩れずに適切な読み上げテキストへ正規化されることを確認する。
+    """
+
     assert normalize_text("CO2濃度を測定する。") == "シーオーツー濃度を測定する."
     assert normalize_text("CO2") == "シーオーツー"
     assert (
@@ -4664,8 +4752,7 @@ def test_normalize_text_black_and_white_circled_numbers(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    黒丸数字から白丸数字へ続く手順番号を、読点で区切って読む。
-    複数の組があっても、それぞれの数字を分けて読む。
+    黒丸数字から白丸数字へと続く手順番号が読点で区切られ、複数の組がある場合でも各数字が分離して読まれることを確認する。
     """
 
     if for_irodori is True:
@@ -4692,7 +4779,7 @@ def test_normalize_text_circled_number_non_targets(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    同じ種類の丸数字の連続と、数字に隣接する読点の区切り方を保つ。
+    同種の丸数字が連続する場合や、数字に隣接する読点の区切り方が意図通りに保持されることを確認する。
     """
 
     if for_irodori is True:
@@ -4701,7 +4788,10 @@ def test_normalize_text_circled_number_non_targets(
 
 
 def test_normalize_text_enclosed_characters():
-    """囲み文字の正規化のテスト"""
+    """
+    丸数字や囲み英数字、囲み漢字などの各種囲み文字が、適切な文字や単語へ正規化されることを確認する。
+    """
+
     # 丸付き数字
     assert normalize_text("①②③④⑤⑥⑦⑧⑨⑩") == "12345678910"
     assert normalize_text("⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳") == "11121314151617181920"
@@ -4796,7 +4886,9 @@ def test_normalize_text_separated_number_sequences(
 
 
 def test_normalize_text_itaiji():
-    """異体字・旧字体→新字体の変換テスト"""
+    """
+    人名や地名などに用いられる旧字体や異体字が、標準的な新字体へ適切に変換されることを確認する。
+    """
 
     # 基本的な旧字体→新字体の変換
     assert normalize_text("學校") == "学校"
@@ -4849,11 +4941,8 @@ def test_normalize_text_itaiji():
 
 
 def test_normalize_text_cjk_compatibility_ideographs():
-    """CJK 互換漢字・拡張漢字の保持テスト
-
-    NFKC 正規化で統合漢字に変換されない互換漢字 (﨑 等) や CJK 拡張 B 以降の
-    異体字 (𠮷 等) が、文字種クリーンアップで削除され「黒﨑→黒」のように表層が
-    欠けるバグへのリグレッションテスト。
+    """
+    NFKC 正規化で統合漢字に変換されない互換漢字や CJK 拡張漢字が、文字種クリーンアップ処理で欠落することなく保持されることを確認する。
     """
 
     # ITAIJI_MAP に登録済みの互換漢字・拡張漢字は通用字へ変換される
@@ -4874,7 +4963,9 @@ def test_normalize_text_cjk_compatibility_ideographs():
 
 
 def test_normalize_text_japanese_unicode_blocks_keep_surface() -> None:
-    """日本語の表層として出現し得る Unicode ブロックの保持テスト"""
+    """
+    ひらがな・カタカナ・漢字をはじめ、日本語の表層として出現し得る各種 Unicode ブロックの文字が削除されず保持されることを確認する。
+    """
 
     # 二の字点は pyopenjtalk が読みに展開しないため、直前の漢字を繰り返す
     assert normalize_text("人〻") == "人人"  # U+303B
@@ -4905,7 +4996,9 @@ def test_normalize_text_japanese_unicode_blocks_keep_surface() -> None:
 
 
 def test_normalize_text_non_japanese_unicode_blocks_are_removed() -> None:
-    """現状の設計で読み上げ対象外として削除する Unicode ブロックのテスト"""
+    """
+    日本語の読み上げ対象外として定義された Unicode ブロックの文字が、適切に除去されることを確認する。
+    """
 
     # 外国語文字は日本語向け normalizer の対象外として削除する
     assert normalize_text("東京가서울") == "東京"  # Hangul Syllables
@@ -4923,7 +5016,10 @@ def test_normalize_text_non_japanese_unicode_blocks_are_removed() -> None:
 
 
 def test_normalize_text_english():
-    """英語関連の正規化のテスト"""
+    """
+    英単語や英文表記が、辞書や発音規則に基づいて適切なカタカナ読みへ正規化されることを確認する。
+    """
+
     # 基本的な英単語
     assert normalize_text("Hello") == "ハロー"
     assert normalize_text("Good Morning") == "グッドモーニング"
@@ -5167,8 +5263,7 @@ def test_normalize_text_number_labels(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    算用数字や漢数字が続く「No.」を「ナンバー」に書き換える。
-    全角表記や丸数字にも同じ規則を適用する。
+    算用数字や漢数字が後続する「No.」表記が「ナンバー」へ書き換えられ、全角表記や丸数字にも同様に適用されることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == expected
@@ -5191,8 +5286,7 @@ def test_normalize_text_number_label_non_targets(
     text: str, expected: str, expected_irodori: str, for_irodori: bool
 ) -> None:
     """
-    数字が続かない「No.」や、英字を含む通し番号の読みを保つ。
-    ピリオドのない「NO1」も、英語読みを保つ。
+    数字が後続しない「No.」や英字を含む通し番号、ピリオドのない表記が「ナンバー」へ誤変換されず、英語読みが保たれることを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -5253,7 +5347,7 @@ def test_normalize_text_number_labels_preserve_english_negation(
     text: str, expected: str, expected_irodori: str, for_irodori: bool
 ) -> None:
     """
-    前後に英単語がある英文の「no.」は否定語として残し、独立した番号の読みも保つ。
+    前後に英単語が存在する英文中の「no.」が否定語として維持され、番号ラベルへ誤変換されないことを確認する。
     """
 
     assert normalize_text(text, for_irodori=for_irodori) == (
@@ -5302,9 +5396,7 @@ def test_normalize_text_uppercase_abbreviations(
     text: str, expected: str, for_irodori: bool
 ) -> None:
     """
-    「COP6」は「シーオーピーシックス」、「OL」は「オーエル」、「TOKIO」は「トキオ」へ変換
-    小文字の「cop」は「コップ」、「iPhone11」は「アイフォンイレブン」と読む
-    音楽クレジットの「Vo」は「ボーカル」、酸素摂取量の「Vo2」は「ブイオーツー」と読む
+    大文字略語や固有名詞・型番・音楽クレジットなどの英字略記が、文脈に応じた適切なカタカナ読みへ正規化されることを確認する。
     """
 
     if for_irodori is True and text == "GPT-4.5":
@@ -5318,7 +5410,10 @@ def test_normalize_text_uppercase_abbreviations(
 
 
 def test_normalize_text_mixed_scripts():
-    """文字種混在のテスト"""
+    """
+    漢字・ひらがな・カタカナ・英単語・数字・記号が混在する文において、各要素が破綻することなく適切に正規化されることを確認する。
+    """
+
     # 漢字・ひらがな・カタカナの混在
     assert (
         normalize_text("漢字とひらがなとカタカナの混在文")
@@ -5338,7 +5433,10 @@ def test_normalize_text_mixed_scripts():
 
 
 def test_normalize_text_edge_cases():
-    """エッジケースの正規化のテスト"""
+    """
+    空文字列や空白のみの入力、記号の連続など、多様なエッジケースにおいて例外が発生せず意図通りに正規化されることを確認する。
+    """
+
     # 空文字列
     assert normalize_text("") == ""
     # 記号のみ
@@ -5379,7 +5477,10 @@ def test_normalize_text_edge_cases():
 
 
 def test_normalize_text_complex():
-    """複合的なパターンの正規化のテスト"""
+    """
+    日付・時刻・数量・URL・英単語などが複合的に含まれる長文テキストにおいて、すべての正規化処理が正しく組み合わさって適用されることを確認する。
+    """
+
     # 日付・時刻・単位を含む文
     assert (
         normalize_text("2024/01/01(月)の14時30分に1.5kgの荷物を受け取った。")
@@ -5756,6 +5857,8 @@ def test_normalize_text_complex_marketing_showcase(
     input_text: str,
     expected_text: str,
 ) -> None:
-    """よりわかりやすく実際に出てきそうな、複合的な正規化条件が適用される文章をテストする。"""
+    """
+    実際のユースケースに即した宣伝文や告知文において、複数の正規化条件が複合的に適用されて自然な読みへ正規化されることを確認する。
+    """
 
     assert normalize_text(input_text) == expected_text
