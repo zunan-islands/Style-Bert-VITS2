@@ -381,6 +381,7 @@ def test_normalize_text_return_details_omits_unmodified_or_non_target_ranges(
     [
         ("全体の½が賛成", "½", "二ぶんの一"),
         ("値は-0.5です", "-0.5", "マイナス零点五"),
+        ("それは1ctです", "1ct", "1カラット"),
     ],
 )
 def test_normalize_text_return_details_records_reading_rules(
@@ -5172,6 +5173,40 @@ def test_normalize_text_hectare_unit(
 ) -> None:
     """
     「1ha」「８．５ｈａ」「三百ｈａ」のように数の後の「ha」が、英語の「ハー」ではなく面積の単位の「ヘクタール」と読まれることを確認する。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 数の直後の単位記号は、英単語や州名の略語ではなく単位として読む
+        ("それは1ctです", "それは1カラットです", "それは1カラットです"),
+        ("それは2calです", "それは2カロリーです", "それは2カロリーです"),
+        ("それは3ftです", "それは3フィートです", "それは3フィートです"),
+        ("それは4lxです", "それは4ルクスです", "それは4ルクスです"),
+        ("それは5inです", "それは5インチです", "それは5インチです"),
+        ("それは6ktです", "それは6ノットです", "それは6ノットです"),
+        # アールの「a」は、数式の係数の「3a」と区別できないので単位にしない
+        ("3aの2乗b", "3aの2乗b", "3aの2乗b"),
+        ("0.5ct", "0.5カラット", "零点五カラット"),
+        # 数のない語や、後ろに英数字が続く語は単位にしない
+        ("2in1", "2in1", "2in1"),
+        ("made in Japan", "メイドインジャパン", "メイドインジャパン"),
+        ("a pen", "アペン", "アペン"),
+        # 「cc」はコアが助数詞として「シーシー」とアクセント付きで読むので、カタカナにせずに渡す
+        ("それは1ccです", "それは1ccです", "それは1ccです"),
+    ],
+)
+def test_normalize_text_units_after_numbers(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「1ct」「2cal」「3ft」「4lx」「5in」「6kt」のように数の直後に置いた単位記号が、
+    「コネチカット」「キャル」「エフティー」「イン」「キロトン」と読まれず、カラット・カロリー・フィート・ルクス・インチ・ノットと読まれることを確認する。
+    「in」は英語の前置詞と同じ綴りなので、数の直後にあって後ろに英数字が続かないときだけ単位にする。
     """
 
     assert normalize_text(text) == expected

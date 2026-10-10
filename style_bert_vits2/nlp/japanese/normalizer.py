@@ -349,6 +349,22 @@ __NUMBER_SIGN_TO_DROP_PATTERN = re.compile(
     r"|(?<![A-Za-z])(?<=[\^´`;ω∀▽])#|(?<![A-Za-z])#(?=[\^´`;ω∀▽])"
 )
 
+# 数の直後の単位記号のうち、英単語や略語と同じ綴りのもの (「1ct」「5in」) を検出する
+## 「in」は前置詞と同じ綴りなので、__UNIT_MAP には入れず、数の直後で後ろに英数字が続かないときだけ単位にする
+## アールの「a」は「3a」「-4a」のような数式の係数と区別できないので、単位にしない
+## 「kt」はキロトンにも使うが、数の後では速さのノットとして読む
+## 「Pixel 8a」のように英単語と空白に続く数は型番なので除く
+__NUMBER_UNIT_WORD_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9.])(?<![A-Za-z][ \u3000])(\d+(?:\.\d+)?)(ct|cal|ft|lx|in|kt)(?![A-Za-z0-9])"
+)
+__NUMBER_UNIT_WORD_MAP = {
+    "ct": "カラット",
+    "cal": "カロリー",
+    "ft": "フィート",
+    "lx": "ルクス",
+    "in": "インチ",
+    "kt": "ノット",
+}
 # 負の数の符号 (「値は-0.5」「前年比-3.2%」「－１」) を検出する
 ## 数字・漢数字・英字・閉じ括弧の後の「-」は範囲・引き算・型番や部屋番号の区切りなので除き、「- 1つ目」のように空白が続く箇条書きの記号も除く
 ## 「序-2-1図」のように後ろの数にさらに「-」と数が続くものは、図表や章の番号の区切りなので除く
@@ -812,6 +828,8 @@ __UNIT_MAP = {
     "m2": "平方メートル",
     "m3": "立方メートル",
     "ha": "ヘクタール",
+    # 「1cc」はコアが助数詞の「シーシー」として「イチシーシ＼ー」とアクセント付きで読むので、カタカナにせずそのまま渡す
+    "cc": "cc",
     "cm": "センチメートル",
     "cm2": "平方センチメートル",
     "cm3": "立方センチメートル",
@@ -1868,6 +1886,7 @@ def __collect_normalization_details(
         (__DEGREE_UNIT_PATTERN, "unit", 18),
         (__PAGE_UNIT_PATTERN, "unit", 19),
         (__UNIT_PATTERN, "unit", 20),
+        (__NUMBER_UNIT_WORD_PATTERN, "unit", 20),
         (__CURRENCY_PATTERN, "unit", 21),
         (__CHEMICAL_FORMULA_PATTERN, "number", 22),
         (__NUMBER_RANGE_PATTERN, "number", 23),
@@ -2786,6 +2805,11 @@ def __replace_symbols(text: str) -> str:
     ## 英字の後の「C#」「F#」は、後段の記号辞書で「シャープ」と読む
     text = __NUMBER_SIGN_BEFORE_DIGIT_PATTERN.sub("ナンバー", text)
     text = __NUMBER_SIGN_TO_DROP_PATTERN.sub("", text)
+
+    # 数の直後の「ct」「in」などの単位記号は、英単語のカタカナ読みより先に単位の読みへ書き換える
+    text = __NUMBER_UNIT_WORD_PATTERN.sub(
+        lambda m: m.group(1) + __NUMBER_UNIT_WORD_MAP[m.group(2)], text
+    )
 
     # 語や記号の後で数字の直前にある「-」は負の数の符号なので、休止として読み落とさずに「マイナス」と読む
     text = __NEGATIVE_SIGN_PATTERN.sub("マイナス", text)
