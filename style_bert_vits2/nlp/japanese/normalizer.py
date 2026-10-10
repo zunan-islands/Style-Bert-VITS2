@@ -308,6 +308,16 @@ __DECORATIVE_PLUS_PATTERN = re.compile(
     r"(?<![A-Za-z0-9ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々Α-Ωα-ω+ \u3000)\]」』】》〉/])[ \u3000]*\+[ \u3000]*"
     r"(?![A-Za-z0-9ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々Α-Ωα-ω+ \u3000(\[「『【《〈/])"
 )
+# 公共の短縮ダイヤル (「#7119」救急安心電話相談、「#9110」警察相談、「#8000」こども医療電話相談など) を検出する
+## 「#」の後に7〜9で始まる4桁の番号は、数字の前の「ナンバー」より先に当てて、「シャープ」と桁読みの番号で読む
+__SHORT_DIAL_NUMBER_PATTERN = re.compile(
+    r"(?<![A-Za-z&])#(?P<digits>[7-9][0-9]{3})(?![0-9])"
+)
+# 短縮ダイヤルの番号を桁読みで書く変換表
+## 「〇」はコアが「マル」と読むが、短縮ダイヤルの0は「ゼロ」と読むのが自然なので (「#8000」は「シャープハチゼロゼロゼロ」)、0だけをカタカナで書く
+__SHORT_DIAL_DIGIT_TRANSLATE_TABLE = str.maketrans(
+    {**dict(zip("123456789", "一二三四五六七八九", strict=True)), "0": "ゼロ"}
+)
 # 数字の前の「#」(「＃５」「#06」「白＃二十八」) を検出する
 ## 「C#」「F#」のように英字の後の「#」はプログラミング言語や音名なので、HTML の文字参照の「&#」は番号ではないので対象外にする
 ## 漢数字の後ろに漢字が続く「#千葉」「#一人旅」は、番号ではなくハッシュタグなので対象外にする
@@ -1828,6 +1838,7 @@ def __collect_normalization_details(
         (__ROOM_NUMBER_GOUSHITSU_PATTERN, "number", 13),
         (__ROOM_NUMBER_GOU_PATTERN, "number", 14),
         (__ROOM_NUMBER_IMPLICIT_PATTERN, "number", 15),
+        (__SHORT_DIAL_NUMBER_PATTERN, "number", 15),
         (__FLOOR_PATTERN, "number", 16),
         (__COMPACT_DURATION_PATTERN, "unit", 17),
         (__RECIPROCAL_COMPOUND_UNIT_PATTERN, "unit", 17),
@@ -2714,6 +2725,16 @@ def __replace_symbols(text: str) -> str:
 
     # 見出しの前後の「＋＋」や記号に挟まれた「＋」は装飾なので、「プラス」と読まずに除く
     text = __DECORATIVE_PLUS_PATTERN.sub("", text)
+
+    # 公共の短縮ダイヤルは「シャープ」と桁読みの番号で書き、コアに「シャープ、ナナイチイチキュー」と読ませる
+    ## 区切りの「'」は Irodori-TTS 向けの経路で1文に2つあると鉤括弧の組に変わるので、読点で区切る
+    text = __SHORT_DIAL_NUMBER_PATTERN.sub(
+        lambda m: (
+            "シャープ、"
+            + m.group("digits").translate(__SHORT_DIAL_DIGIT_TRANSLATE_TABLE)
+        ),
+        text,
+    )
 
     # 数字の前の「#」は番号なので「ナンバー」と読み、ハッシュタグや顔文字の「#」は読まずに除く
     ## 英字の後の「C#」「F#」は、後段の記号辞書で「シャープ」と読む
