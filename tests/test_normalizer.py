@@ -1051,6 +1051,37 @@ def test_normalize_text_roman_numerals(
 
 @pytest.mark.parametrize("for_irodori", [False, True])
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # カタカナや英字の名前の直後の11までのローマ数字は、英語で読む
+        ("ドラゴンクエストⅧ", "ドラゴンクエストエイト"),
+        ("ドラゴンクエストⅧの発売", "ドラゴンクエストエイトの発売"),
+        ("ロッキーⅣ", "ロッキーフォー"),
+        # 波ダッシュで範囲を示すローマ数字は、後段で「から」と読む数の範囲になるよう数詞で読む
+        ("ロッキーⅣ〜Ⅵを観た", "ロッキー四から六を観た"),
+        ("FFⅦ", "エフエフセブン"),
+        # 12からは日本語の音韻で読みにくいので、名前の後でも数詞で読む
+        ("ファイナルファンタジーⅫ", "ファイナルファンタジー十二"),
+        # 「世」「型」などの漢字が続くものや、漢字の後のものは、名前と番号と確かめられないので数詞で読む
+        ("ヘンリーⅧ世", "ヘンリー八世"),
+        ("Ⅲ型コラーゲン", "三型コラーゲン"),
+        ("第Ⅱ章", "第二章"),
+        ("三國志Ⅺ", "三国志十一"),
+    ],
+)
+def test_normalize_text_roman_numerals_after_names(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    「ドラゴンクエストⅧ」「ロッキーⅣ」のように名前の直後に置いた11までのローマ数字が、「ドラゴンクエスト八」と数詞で読まれず「エイト」と英語で読まれることを確認する。
+    ローマ数字を使う時点で英語で読む意図があることが多く、12からは「トゥエルブ」が日本語の音韻で読みにくいので数詞にする。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
     ("text", "fragment", "reading"),
     [
         ("Ⅱ章", "Ⅱ", "二"),

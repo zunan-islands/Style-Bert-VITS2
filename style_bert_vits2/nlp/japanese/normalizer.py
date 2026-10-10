@@ -1528,6 +1528,18 @@ def normalize_text(
             -value if index + 1 < len(values) and value < values[index + 1] else value
             for index, value in enumerate(values)
         )
+        # カタカナや英字の名前の直後の11までのローマ数字は、「ドラゴンクエストエイト」のように英語で読む
+        ## ローマ数字を使う時点で英語で読む意図が多く、12からは「トゥエルブ」が日本語の音韻で読みにくいので数詞にする
+        ## 「ヘンリーⅧ世」「Ⅲ型」のように漢字が続くものと、漢字の後のものは、名前と番号と確かめられないので数詞にする
+        ## 「ロッキーⅣ〜Ⅵ」のように波ダッシュが続く範囲の始まりは、後段で「四から六」と読むよう数詞にする
+        if (
+            total <= 11
+            and len(match.group()) == len(match.group(1))
+            and re.search(r"[A-Za-zァ-ヴー]$", text[: match.start()]) is not None
+            and re.match(r"[\u3400-\u4DBF\u4E00-\u9FFF々〜～~]", text[match.end() :])
+            is None
+        ):
+            return KATAKANA_MAP[num2words(total, lang="en")]
         return str(num2words(total, lang="ja")) + (
             "の" if len(match.group()) > len(match.group(1)) else ""
         )
