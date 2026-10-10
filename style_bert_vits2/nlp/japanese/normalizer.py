@@ -174,6 +174,19 @@ __BLOCK_PATTERN = re.compile(r"(?:(?:[#$%&*+\-=_:/\\|;<>^])|\s){3,}")
 __NUMBER_RANGE_PATTERN = re.compile(
     r"(\d+(?:\.\d+)?(?:\s*[a-zA-Z]+)?)\s*[〜~～]\s*(\d+(?:\.\d+)?(?:\s*[a-zA-Z]+)?)"
 )
+# 「2〜3日かかる」「15〜6年前」のように、1ずつ違う数どうしの数量の範囲を検出する
+## 終わりが1桁の数で、後ろに日数・人数・年数・個数のような数量の助数詞か単位が続くものだけを対象にする
+## 時刻 (「2〜3時」)・月 (「2〜3月」)・日付 (「2〜3日まで」「5月2〜3日」)・学年や順番 (「1〜2年生」「2〜3日目」)・元号の年は数量ではないので除く
+## 「月2〜3回」も、コアが「月2」の後で区切って「ツキニ、サンカイ」と読むので除く
+## 「日」は「日後」「日ほど」のように日数と分かる語が続くときだけ数量とし、「2〜3日間」はコアが「ミッカカン」と日付の読みにするので除く
+__ADJACENT_NUMBER_RANGE_PATTERN = re.compile(
+    r"(?<![0-9.,/:A-Za-z\-−－第時月])(?<!明治|大正|昭和|平成|令和)"
+    r"(?P<start>[1-9]?[1-8])[〜~～](?P<end>[2-9])"
+    r"(?=(?P<counter>時間|分(?!目)|秒|週間|[ヶヵカケか]月|年(?!生|度|目|代)"
+    r"|日(?:後|前|で|ほど|程度|くらい|ぐらい|おき|ごと|以内|以上|かか|も)"
+    r"|人(?!目)|個|回(?!目)|本|枚|杯|台|冊|件|歳|才|割|倍|度|点|匹|頭|軒|粒|社|名"
+    r"|kg|km|cm|mm|g(?![A-Za-z])|m(?![A-Za-z])|%|℃))"
+)
 # 数値+日本語単位から一般語へ続く範囲を検出する
 ## 「月1度～毎週」の右側は数値でないため、数値同士だけを見る上のパターンでは長音へ誤変換される
 __MIXED_NUMBER_RANGE_PATTERN = re.compile(
@@ -2032,6 +2045,14 @@ def __collect_normalization_details(
     for match in __NUMBER_WITH_JAPANESE_COMMA_SEPARATOR_PATTERN.finditer(search_text):
         candidates.append((match.start(), match.end() + 1, "number", 26))
 
+    # 概数の形にした「2〜3日」は、概数と判定する手がかりの助数詞や単位まで含めて1つの区間にする
+    ## 数の範囲だけを再変換すると「2から3」になって全文の「2、3」と食い違い、区間ごとに後ろの全文を変換し直すことになる
+    ## 「1〜2人」のように概数にしない範囲も同じく助数詞まで含めた区間になるが、区間だけの変換が全文の「1から2人」と一致するので、そのまま記録できる
+    candidates.extend(
+        (match.start(), match.end("counter"), "number", 23)
+        for match in __ADJACENT_NUMBER_RANGE_PATTERN.finditer(search_text)
+    )
+
     # 数値と百分率記号は一つの発話内容になるため、数値部分を分割しない
     candidates.extend(
         (match.start(), match.end(), "percentage", 0)
@@ -2480,6 +2501,19 @@ def __replace_symbols(text: str) -> str:
                 return f"{converted_start}から{converted_end}"
         return f"{start}から{end}"
 
+    # 1ずつ違う数どうしの数量の範囲は、コアが休止を置かずに「ニサンニチ」と読む概数の「2、3日」の形にする
+    def convert_adjacent_number_range(match: re.Match[str]) -> str:
+        following_text = match.string[match.end() :]
+        if (
+            # 「15〜6年」は前の数の1の位と後ろの数が1ずつ違うものだけを概数にする
+            int(match.group("start")) % 10 + 1 != int(match.group("end"))
+            # 「1〜2人」はコアが「2人」を「フタリ」と読み「イチフタリ」になるので除く
+            or (match.group("end") == "2" and following_text.startswith("人"))
+        ):
+            return match.group()
+        return f"{match.group('start')}、{match.group('end')}"
+
+    text = __ADJACENT_NUMBER_RANGE_PATTERN.sub(convert_adjacent_number_range, text)
     text = __NUMBER_RANGE_PATTERN.sub(convert_range, text)
     # 数値+単位から一般語へ続く範囲は、残った波ダッシュが後段で長音になる前に展開する
     text = __MIXED_NUMBER_RANGE_PATTERN.sub(r"\1から", text)
