@@ -750,6 +750,7 @@ __UNIT_MAP = {
     "km3": "立方キロメートル",
     "m2": "平方メートル",
     "m3": "立方メートル",
+    "ha": "ヘクタール",
     "cm": "センチメートル",
     "cm2": "平方センチメートル",
     "cm3": "立方センチメートル",
@@ -840,9 +841,14 @@ __UNIT_PATTERN = re.compile(
     r"(?P<unit>(?:(k|d|m)?L|(?:k|c|m)m[23]?|m[23]?|m(?![a-zA-Z])|"
     r"(?:k|m)?g|(?:k|K|M|G|T|P|E)(?:i)?B|B|t|d|h|s|ms|μs|ns|"
     r"(?:k|m)?Ah|(?:m|k|M|G|T)?Wh|(?:k|m)?A|(?:k|K|M|G|T)?[Hh]z|"
-    r"[Hh][Pp]a|(?:k|K|M|G|T|P|E)?(?:bps|bit|b)))"
+    r"[Hh][Pp]a|ha|(?:k|K|M|G|T|P|E)?(?:bps|bit|b)))"
     r"(?P<suffix>/[hs])?"
     r"(?=($|(?=/([^A-Za-z]|$))|[^/A-Za-z]))"
+)
+# 漢数字の後の「ha」を検出する
+## 算用数字の後の単位は __UNIT_PATTERN で読むが、白書などに多い「三百ｈａ」「百五十万ｈａ」の漢数字の後は拾えない
+__KANJI_NUMERAL_HECTARE_PATTERN = re.compile(
+    r"(?<=[〇一二三四五六七八九十百千万億兆])ha(?![A-Za-z])"
 )
 # 中黒で連結した単位の負の1乗は、数量あたりの値として「マイ」を付けて読む
 ## 英単語や型番内へ広げず、既知の単位だけが連続する表記を対象にする
@@ -3293,6 +3299,9 @@ def __convert_numbers_to_words(text: str) -> str:
         if converted_res == res:
             break
         res = converted_res
+
+    # 漢数字の後の「ha」も、面積の単位のヘクタールとして読む
+    res = __KANJI_NUMERAL_HECTARE_PATTERN.sub("ヘクタール", res)
 
     # 12,300 のような数字の区切りとしてのカンマを削除
     res = __NUMBER_WITH_SEPARATOR_PATTERN.sub(lambda m: m[0].replace(",", ""), res)

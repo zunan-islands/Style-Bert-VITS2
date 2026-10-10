@@ -4689,6 +4689,34 @@ def test_normalize_text_currency():
     assert normalize_text("₡1000") == "1000コロン"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        ("1ha", "1ヘクタール", "1ヘクタール"),
+        ("8.5ha", "8.5ヘクタール", "八点五ヘクタール"),
+        ("１ｈａ以上", "1ヘクタール以上", "1ヘクタール以上"),
+        # 漢数字の後の「ｈａ」も、面積の単位として読む
+        (
+            "三百ｈａにおよぶ園内",
+            "三百ヘクタールにおよぶ園内",
+            "三百ヘクタールにおよぶ園内",
+        ),
+        ("百六十八万３千ｈａ", "百六十八万3千ヘクタール", "百六十八万3千ヘクタール"),
+        # 数のない「ha」は、ほかの単位の「kg」などと同じく英字のまま残す
+        ("ha", "ha", "ha"),
+    ],
+)
+def test_normalize_text_hectare_unit(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「1ha」「８．５ｈａ」「三百ｈａ」のように数の後の「ha」が、英語の「ハー」ではなく面積の単位の「ヘクタール」と読まれることを確認する。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
 def test_normalize_text_units():
     """
     長さ・重さ・体積・速度・データ容量などの各種単位記号が、数値と組み合わさった際に適切な日本語の読みへ正規化されることを確認する。
