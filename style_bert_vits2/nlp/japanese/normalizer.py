@@ -349,6 +349,14 @@ __NUMBER_SIGN_TO_DROP_PATTERN = re.compile(
     r"|(?<![A-Za-z])(?<=[\^´`;ω∀▽])#|(?<![A-Za-z])#(?=[\^´`;ω∀▽])"
 )
 
+# 負の数の符号 (「値は-0.5」「前年比-3.2%」「－１」) を検出する
+## 数字・漢数字・英字・閉じ括弧の後の「-」は範囲・引き算・型番や部屋番号の区切りなので除き、「- 1つ目」のように空白が続く箇条書きの記号も除く
+## 「序-2-1図」のように後ろの数にさらに「-」と数が続くものは、図表や章の番号の区切りなので除く
+__NEGATIVE_SIGN_PATTERN = re.compile(
+    r"(?<![0-9〇一二三四五六七八九十百千万A-Za-zΑ-Ωα-ω)\]）】」』}\-−])[-−]"
+    r"(?=\d+(?:\.\d+)?(?![\d.]|[-−]\d))"
+)
+
 # 記号などの読み正規化マップ
 # 一度リストアップしたがユースケース上不要と判断した記号はコメントアウトされている
 __SYMBOL_YOMI_MAP = {
@@ -1926,6 +1934,12 @@ def __collect_normalization_details(
             start -= 1
         candidates.append((start, end, "symbol", 50))
 
+    # 「マイナス」と読む負の数の符号は、後ろの数まで含めて1つの区間にする
+    for match in __NEGATIVE_SIGN_PATTERN.finditer(search_text):
+        number = re.match(r"\d+(?:\.\d+)?", search_text[match.end() :])
+        if number is not None:
+            candidates.append((match.start(), match.end() + number.end(), "number", 25))
+
     # 数値と百分率記号は一つの発話内容になるため、数値部分を分割しない
     candidates.extend(
         (match.start(), match.end(), "percentage", 0)
@@ -2772,6 +2786,9 @@ def __replace_symbols(text: str) -> str:
     ## 英字の後の「C#」「F#」は、後段の記号辞書で「シャープ」と読む
     text = __NUMBER_SIGN_BEFORE_DIGIT_PATTERN.sub("ナンバー", text)
     text = __NUMBER_SIGN_TO_DROP_PATTERN.sub("", text)
+
+    # 語や記号の後で数字の直前にある「-」は負の数の符号なので、休止として読み落とさずに「マイナス」と読む
+    text = __NEGATIVE_SIGN_PATTERN.sub("マイナス", text)
 
     # 記号類を辞書で置換
     text = __SYMBOL_YOMI_PATTERN.sub(lambda x: __SYMBOL_YOMI_MAP[x.group()], text)
