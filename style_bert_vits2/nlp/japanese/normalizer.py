@@ -645,27 +645,9 @@ __KANJI_DECIMAL_PATTERN = re.compile(
     r"(?![0-9〇一二三四五六七八九十百千万億兆]|\.[0-9〇一二三四五六七八九])"
 )
 
-# 数字1桁→カタカナ読みのマッピング
-# 1モーラの数字（2, 5）は長音付き（ニー, ゴー）がデフォルト
-__DIGIT_TO_KATAKANA_MAP: dict[str, str] = {
-    "0": "ゼロ",
-    "1": "イチ",
-    "2": "ニー",
-    "3": "サン",
-    "4": "ヨン",
-    "5": "ゴー",
-    "6": "ロク",
-    "7": "ナナ",
-    "8": "ハチ",
-    "9": "キュー",
-}
-# 1モーラの数字（2, 5）を伸ばさずに短く読む場合のマッピング
-__DIGIT_TO_KATAKANA_SHORT_MAP: dict[str, str] = {
-    "2": "ニ",
-    "5": "ゴ",
-}
-# 部屋番号の中間0の読み方（マル）
-__DIGIT_ZERO_MARU = "マル"
+# 電話番号・郵便番号の組を区切る記号の仮置き
+## 番号の組をハイフンでつないで NJD に読ませるが、同じ関数の後段の住所や郵便番号の処理が「03-1234」を番地や郵便番号と取り違えないよう、関数を抜けるまでは私用領域の文字で区切る
+__NUMBER_GROUP_SEPARATOR_PLACEHOLDER = "\ue000"
 # 3桁の部屋番号を桁読みの漢数字（309→三〇九）へ書き換える変換表
 __DIGIT_TO_KANJI_TRANSLATE_TABLE = str.maketrans("0123456789", "〇一二三四五六七八九")
 # 電話番号パターン: ハイフン区切り（先頭が 0 のみマッチ）
@@ -772,9 +754,12 @@ __ADDRESS_MARKER_TAIL_PATTERN = re.compile(
     r"[\u200c\u200d \u3000A-Za-z0-9\u30A0-\u30FF\u3400-\u9FFF々〆ヶの・ー第\-]{0,64}"
 )
 # 「数字 + マーカー + スペース + 数字」を検出するパターン
-# __normalize_phone_postal_address_floor() 内で住所/郵便番号/電話番号の直後スペースに
-# マーカー（\u200c, \u200d）を使うため、この段階で数字連結防止の ' を入れる
-__DIGIT_MARKER_SPACE_DIGIT_PATTERN = re.compile(r"(\d)[\u200c\u200d][ \u3000]+(\d)")
+# __normalize_phone_postal_address_floor() 内で住所の直後スペースにマーカー（\u200d）を使うため、この段階で数字連結防止の ' を入れる
+## 電話番号・郵便番号の前後は「'」ではなく後段の読点で区切る
+## 「6'0296-44-5678」「0967-44-0336'1泊」のように「'」と隣り合うと、英単語の変換が番号のハイフンを消してしまう
+__DIGIT_MARKER_SPACE_DIGIT_PATTERN = re.compile(
+    r"(\d)\u200d[ \u3000]+(\d)(?!\d*" + __NUMBER_GROUP_SEPARATOR_PLACEHOLDER + ")"
+)
 # マーカー + スペース（半角/全角）を検出するパターン
 __MARKER_SPACE_PATTERN = re.compile(r"[\u200c\u200d][ \u3000]+")
 # 号の文脈判定に使う建物名キーワード
@@ -824,7 +809,9 @@ __RAILWAY_CAR_NUMBER_PATTERN = re.compile(
 __ROOM_NUMBER_IMPLICIT_PATTERN = re.compile(
     r"([\u30A1-\u30FA\u30FC-\u30FF])"  # カタカナのみ（建物名末尾）
     r"(\d{3,}(?:・\d{3,})*)"  # 3桁以上の数字（部屋番号）と、中黒で並べた部屋番号
-    r"(?!号室|号|[a-zA-Z\d])"  # 後に号室/号/英字/数字が続かないこと
+    r"(?!号室|号|[a-zA-Z\d"
+    + __NUMBER_GROUP_SEPARATOR_PLACEHOLDER
+    + r"])"  # 後に号室/号/英字/数字/電話番号の組の区切りが続かないこと
 )
 # フロア表記パターン: NF → N階, BNF → 地下N階
 # 後に英字が続く場合は変換しない（5GHz, UTF-8, PDF などを除外）
@@ -2961,9 +2948,9 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     """
     電話番号・郵便番号・住所番地・フロア表記を正規化する。
 
-    電話番号の数字は OpenJTalk が数値として読み上げてしまうのを防ぐため、
-    1桁ずつカタカナ読みに変換する。ハイフンは読点（,）に変換されて TTS でポーズになる。
-    郵便番号のハイフンは「の」に変換される。住所番地のハイフンも「の」に変換される。
+    電話番号と郵便番号は、数字のまま組をハイフンでつなぎ、桁読み・区切りの休止・郵便番号の「ノ」と「マル」の読みとアクセントをコアの NJD に任せる。
+    中黒や括弧で区切った電話番号と、区切りのない携帯電話などの番号も、コアが電話番号と判定できるようハイフンでつなぐ。
+    住所番地のハイフンは「の」に変換される。
     フロア表記（NF, BNF）は「N階」「地下N階」に変換される。
 
     処理順序:
@@ -2983,53 +2970,9 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         str: 正規化されたテキスト
     """
 
-    def digits_to_katakana(
-        digits: str,
-        is_shorten_trailing: bool = False,
-        is_use_maru_for_middle_zero: bool = False,
-    ) -> str:
-        """
-        数字列をカタカナ読みに変換する。
-
-        Args:
-            digits (str): 変換する数字列
-            is_shorten_trailing (bool): True の場合、末尾の1モーラ数字（2, 5）を短く読む
-            is_use_maru_for_middle_zero (bool): True の場合、中間の 0 を「マル」と読む
-
-        Returns:
-            str: カタカナ読みに変換された文字列
-        """
-
-        result = ""
-        for index, digit in enumerate(digits):
-            is_last = index == len(digits) - 1
-            is_first = index == 0
-            # 末尾の1モーラ数字（2, 5）を短く読むかどうか
-            if (
-                is_last is True
-                and is_shorten_trailing is True
-                and digit in __DIGIT_TO_KATAKANA_SHORT_MAP
-            ):
-                result += __DIGIT_TO_KATAKANA_SHORT_MAP[digit]
-            # 中間の 0 を「マル」と読むかどうか
-            # 前後の数字がどちらも非ゼロの場合のみマルと読む（連続する 0 はゼロのまま）
-            # 例: 101→イチマルイチ, 1001→イチゼロゼロイチ, 304→サンマルヨン
-            elif (
-                is_first is False
-                and is_last is False
-                and is_use_maru_for_middle_zero is True
-                and digit == "0"
-                and digits[index - 1] != "0"
-                and digits[index + 1] != "0"
-            ):
-                result += __DIGIT_ZERO_MARU
-            else:
-                result += __DIGIT_TO_KATAKANA_MAP.get(digit, digit)
-        return result
-
     def convert_phone_number_hyphenated(match: re.Match[str]) -> str:
         """
-        ハイフン区切りの電話番号をカタカナ読みに変換する。
+        ハイフン・中黒・括弧で区切った電話番号を、数字の組をハイフンでつないだ形にする。
 
         先頭が 0 で始まる3グループのハイフン区切り数字を電話番号として検出する。
         以下のバリデーションを行い、パスしない場合は元の文字列をそのまま返す。
@@ -3037,15 +2980,11 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         - 合計桁数: 8〜11桁
         - 携帯電話 (0X0) は 3-4-4 パターンのみ許可
 
-        3桁グループ末尾ルール:
-        3桁グループの末尾にある1モーラ数字（2, 5）は伸ばさずに短く読む。
-        ただし2桁グループや4桁グループの末尾では通常通り伸ばす。
-
         Args:
             match (re.Match[str]): 正規表現マッチオブジェクト
 
         Returns:
-            str: カタカナ読みに変換された文字列、またはマッチしなかった場合は元の文字列
+            str: 組をハイフンでつないだ電話番号、またはマッチしなかった場合は元の文字列
         """
 
         group1 = match.group(1)  # 市外局番
@@ -3074,22 +3013,13 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         if is_mobile_prefix is True and (len2 != 4 or len3 != 4):
             return match.group(0)
 
-        # 各グループをカタカナに変換
-        # 3桁グループの末尾のみ短く読む
-        is_shorten_g1 = len1 == 3
-        is_shorten_g2 = len2 == 3
-        is_shorten_g3 = len3 == 3
-
-        katakana1 = digits_to_katakana(group1, is_shorten_trailing=is_shorten_g1)
-        katakana2 = digits_to_katakana(group2, is_shorten_trailing=is_shorten_g2)
-        katakana3 = digits_to_katakana(group3, is_shorten_trailing=is_shorten_g3)
-
-        # 区切りの読点は「、」で書き、最後の replace_punctuation() で音素用の「,」にする
-        return f"{katakana1}、{katakana2}、{katakana3}"
+        # 組をハイフンでつなぎ、桁読みと組の間の休止はコアに任せる
+        ## 中黒で区切った「03・1234・5678」は、「電話番号」の見出しがないとコアが位取りで読むので、ハイフンにそろえる
+        return __NUMBER_GROUP_SEPARATOR_PLACEHOLDER.join((group1, group2, group3))
 
     def convert_phone_number_no_hyphen(match: re.Match[str]) -> str:
         """
-        ハイフンなし電話番号をカタカナ読みに変換する。
+        区切りのない電話番号を、数字の組をハイフンでつないだ形にする。
 
         既知のプレフィックス（携帯 0X0、フリーダイヤル 0120、フリーコール 0800、
         ナビダイヤル 0570、IP 電話 050）のみをマッチ対象とする。
@@ -3098,7 +3028,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
             match (re.Match[str]): 正規表現マッチオブジェクト
 
         Returns:
-            str: カタカナ読みに変換された文字列
+            str: 組をハイフンでつないだ電話番号
         """
 
         # 5つのパターンのうちどれがマッチしたかを判定
@@ -3109,53 +3039,13 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
             if group1 is not None:
                 group2 = match.group(base + 1)
                 group3 = match.group(base + 2)
-                # 3桁グループの末尾のみ短く読む
-                is_shorten_g1 = len(group1) == 3
-                is_shorten_g2 = len(group2) == 3
-                is_shorten_g3 = len(group3) == 3
-                katakana1 = digits_to_katakana(
-                    group1, is_shorten_trailing=is_shorten_g1
+                # 区切りがないとコアは組の間に休止を置かないので、組をハイフンでつなぐ
+                return __NUMBER_GROUP_SEPARATOR_PLACEHOLDER.join(
+                    (group1, group2, group3)
                 )
-                katakana2 = digits_to_katakana(
-                    group2, is_shorten_trailing=is_shorten_g2
-                )
-                katakana3 = digits_to_katakana(
-                    group3, is_shorten_trailing=is_shorten_g3
-                )
-                return f"{katakana1}、{katakana2}、{katakana3}"
 
         # ここには到達しないはず
         return match.group(0)
-
-    def convert_postal_code_digits(first3: str, last4: str) -> str:
-        """
-        郵便番号の数字部分をカタカナ読みに変換する。
-
-        前3桁の中間0の読み方:
-        3桁が X0Y（X≠0, Y≠0）の形の場合、中間の 0 は「マル」と読む。
-        例: 304→サンマルヨン, 802→ハチマルニー
-        ただし末尾が 0 の場合はゼロのまま。例: 100→イチゼロゼロ
-
-        郵便番号では3桁末尾も伸ばす（電話番号の3桁末尾ルールとは異なる）。
-
-        Args:
-            first3 (str): 郵便番号の前3桁
-            last4 (str): 郵便番号の後4桁
-
-        Returns:
-            str: カタカナ読みに変換された文字列（「の」区切り）
-        """
-
-        # 前3桁: 中間0をマルとして読むかどうか
-        # X0Y の形（中間が0で、末尾が0でない）の場合のみマルを使う
-        is_use_maru = len(first3) == 3 and first3[1] == "0" and first3[2] != "0"
-        katakana_first = digits_to_katakana(
-            first3,
-            is_shorten_trailing=False,
-            is_use_maru_for_middle_zero=is_use_maru,
-        )
-        katakana_last = digits_to_katakana(last4, is_shorten_trailing=False)
-        return f"{katakana_first}の{katakana_last}"
 
     def convert_room_number_digits(digits: str) -> str:
         """
@@ -3316,7 +3206,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
 
     # マーカー文字: 電話番号・郵便番号の変換結果の末尾に付加する
     # マーカーの直後にある半角スペースを読点に変換し、残ったマーカーは削除する
-    # これにより「郵便番号...ニー 茨城県」→「郵便番号...ニー,茨城県」のようにポーズが入る
+    # これにより「郵便番号304-0002 茨城県」→「郵便番号304-0002,茨城県」のようにポーズが入る
     # 一方「マルマルビル 13F」のようなカタカナ建物名の後のスペースは変換されない
     _MARKER = "\u200c"
     # 住所変換専用マーカー: 号/号室 判定で住所文脈の強い証拠として利用する
@@ -3349,16 +3239,10 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
 
     # 1. 〒 付き郵便番号を先に処理する
     # 〒 が __SYMBOL_YOMI_MAP で「郵便番号」に変換される前に処理する必要がある
+    ## 「郵便番号」の見出しと数字の組を渡し、「イチマルヨンノハチマルイチイチ」の「ノ」と「マル」の読みはコアに任せる
     def convert_postal_with_symbol(match: re.Match[str]) -> str:
-        first3 = match.group(1)
-        # 中黒で区切った郵便番号は、中黒で区切った電話番号と同じく0を「ゼロ」として1桁ずつ読み、区切りで間を置く
-        if match.group(3) is not None:
-            return (
-                f"郵便番号{digits_to_katakana(first3)}、"
-                f"{digits_to_katakana(match.group(3))}{_MARKER}"
-            )
-        last4 = match.group(2)
-        return f"郵便番号{convert_postal_code_digits(first3, last4)}{_MARKER}"
+        last4 = match.group(2) or match.group(3)
+        return f"郵便番号{match.group(1)}{__NUMBER_GROUP_SEPARATOR_PLACEHOLDER}{last4}{_MARKER}"
 
     text = __POSTAL_CODE_WITH_SYMBOL_PATTERN.sub(convert_postal_with_symbol, text)
 
@@ -3373,14 +3257,13 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
 
     text = __PHONE_HYPHENATED_PATTERN.sub(convert_phone_hyphenated_with_marker, text)
 
-    # 2b. 「☎3350・6840」のように電話の記号の直後に市外局番を省いて書いた番号も、1桁ずつ読む
+    # 2b. 「☎3350・6840」のように電話の記号の直後に市外局番を省いて書いた番号も、組をハイフンでつないでコアに桁読みさせる
     ## 電話の記号がない「3350・6840」は年の並びなどと区別できないので変換しない
     def convert_local_phone_after_symbol(match: re.Match[str]) -> str:
-        group1 = match.group(1)
-        group2 = match.group(2)
-        katakana1 = digits_to_katakana(group1, is_shorten_trailing=len(group1) == 3)
-        katakana2 = digits_to_katakana(group2)
-        return f"{katakana1}、{katakana2}{_MARKER}"
+        return (
+            f"{match.group(1)}{__NUMBER_GROUP_SEPARATOR_PLACEHOLDER}{match.group(2)}"
+            + _MARKER
+        )
 
     text = __LOCAL_PHONE_AFTER_SYMBOL_PATTERN.sub(
         convert_local_phone_after_symbol, text
@@ -3389,9 +3272,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     # 3. 〒 なし郵便番号（3桁-4桁）を処理する
     # 電話番号パターンの後に処理する（電話番号が優先されるため）
     def convert_postal_without_symbol(match: re.Match[str]) -> str:
-        first3 = match.group(1)
-        last4 = match.group(2)
-        return f"{convert_postal_code_digits(first3, last4)}{_MARKER}"
+        return f"{match.group(1)}{__NUMBER_GROUP_SEPARATOR_PLACEHOLDER}{match.group(2)}{_MARKER}"
 
     text = __POSTAL_CODE_PATTERN.sub(convert_postal_without_symbol, text)
 
@@ -3476,7 +3357,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         ):
             return match.group(0)
         # 「ミズノ0120・320799」のように、カタカナの社名に続く番号が電話番号として成り立つなら部屋番号にしない
-        ## 電話番号は後段のステップ 7 で1桁ずつ読む
+        ## 電話番号は後段のステップ 7 で組をハイフンでつなぎ、コアに1桁ずつ読ませる
         if __PHONE_NO_HYPHEN_PATTERN.match(match.string, match.start(2)) is not None:
             return match.group(0)
         # 建物名の直後の番号は、号室も号も付かないのでコアには部屋番号の文脈が伝わらない
@@ -3506,7 +3387,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     text = __PHONE_NO_HYPHEN_PATTERN.sub(convert_phone_no_hyphen_with_marker, text)
 
     # 8. マーカーの直後にある半角スペースを読点「、」に変換する
-    # これにより TTS で「郵便番号...ニー,茨城県」のようにポーズが入り自然な読み上げになる
+    # これにより TTS で「郵便番号304-0002,茨城県」のようにポーズが入り自然な読み上げになる
     # 読点は「、」で書き、最後の replace_punctuation() で音素用の「,」にする (解析用テキストで直前の数字の桁区切りと取り違えられないようにするため)
     # ビル名の直後のスペース等はマーカーがないため変換されず、replace_punctuation() で消える
     # 数字 + マーカー + スペース + 数字 は、後段で数字が連結されないよう先に ' に変換する
@@ -3515,6 +3396,8 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
     text = __MARKER_SPACE_PATTERN.sub("、", text)
     text = text.replace(_MARKER, "")
     text = text.replace(_ADDRESS_MARKER, "")
+    # 電話番号・郵便番号の組の区切りを、後段とコアが読むハイフンに戻す
+    text = text.replace(__NUMBER_GROUP_SEPARATOR_PLACEHOLDER, "-")
 
     return text
 
