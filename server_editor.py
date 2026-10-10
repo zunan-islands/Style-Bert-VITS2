@@ -246,8 +246,9 @@ class TextRequest(BaseModel):
 async def read_item(item: TextRequest):
     try:
         # 最初に正規化しないと整合性がとれない
-        text = normalize_text(item.text)
-        kata_tone_list = g2kata_tone(text)
+        ## 合成と同じく、pyopenjtalk には句読点を「、」「。」のまま残した解析用テキストを渡す
+        result = normalize_text(item.text, return_analysis_text=True)
+        kata_tone_list = g2kata_tone(result.text, analysis_text=result.analysis_text)
     except Exception as e:
         raise HTTPException(
             status_code=400,

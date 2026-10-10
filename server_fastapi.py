@@ -290,7 +290,9 @@ if __name__ == "__main__":
 
     @app.post("/g2p")
     def g2p(text: str):
-        return g2kata_tone(normalize_text(text))
+        # 合成と同じく、pyopenjtalk には句読点を「、」「。」のまま残した解析用テキストを渡す
+        result = normalize_text(text, return_analysis_text=True)
+        return g2kata_tone(result.text, analysis_text=result.analysis_text)
 
     @app.get("/models/info")
     def get_loaded_models_info():

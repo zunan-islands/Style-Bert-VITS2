@@ -4,13 +4,17 @@
 
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from num2words import num2words
+from pyopenjtalk import NJDFeature
 
 from preprocess_text import process_line
 from style_bert_vits2.constants import Languages
 from style_bert_vits2.nlp import InvalidPhoneError, clean_text_with_given_phone_tone
+from style_bert_vits2.nlp.japanese import pyopenjtalk_worker
+from style_bert_vits2.nlp.japanese.g2p import text_to_sep_kata
 from style_bert_vits2.nlp.japanese.g2p_utils import (
     kata_tone2phone_tone,
     phone_tone2kata_tone,
@@ -689,6 +693,120 @@ def test_g2p_exclamation_and_question() -> None:
         raise_yomi_error=False,
     )
 
+    _assert_phone_tone_word2ph_consistency(phones, tones, word2ph)
+
+
+def test_g2p_passes_japanese_punctuation_to_pyopenjtalk() -> None:
+    """
+    正規化済みテキストの句点は音素用の「.」になるが、pyopenjtalk には「。」のまま渡すことを確認する。
+    「番号は309.次は」のように半角の「.」で渡すと、pyopenjtalk は「309.」を小数点の付いた数として「サンビャクキュー」と読み、
+    続く「次」を接頭辞の「ジ」と読む。「。」で渡せば文の切れ目として扱われ、「次」は「ツギ」と読まれる。
+    BERT の入力と word2ph に使う正規化済みテキストは、従来どおり「.」のまま返す。
+    """
+
+    norm_text, phones, tones, word2ph, _, sep_kata, _ = (
+        clean_text_with_given_phone_tone(
+            text="番号は309。次は405。",
+            language=Languages.JP,
+            use_jp_extra=True,
+            raise_yomi_error=False,
+        )
+    )
+
+    assert norm_text == "番号は309.次は405."
+    assert sep_kata is not None
+    assert "ツギ" in sep_kata
+    assert len(word2ph) == len(norm_text) + 2
+    _assert_phone_tone_word2ph_consistency(phones, tones, word2ph)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "番号は1234。次は5678。",
+        "番号は309。次は405。",
+        "番号は309、一二三。",
+        "1・2年生です。",
+    ],
+)
+def test_process_line_saves_text_that_reproduces_word2ph_for_bert(
+    text: str, tmp_path: Path
+) -> None:
+    """
+    preprocess_text.process_line() が train.list に保存するテキストを、BERT の特徴量の生成と同じく text_to_sep_kata() で解析し直したとき、
+    前処理の g2p と同じ単語に分かれ、保存した word2ph の長さと一致することを確認する。
+    前処理の g2p は句読点を「、」「。」のまま残した解析用テキストを形態素解析するので、「.」に置き換えた正規化済みテキストを保存すると、
+    bert_gen.py が「1234.」を「千二百三十四」と解析し直し、前処理の「一二三四」と文字数が食い違って止まる。
+    """
+
+    wavs_dir = tmp_path / "wavs"
+    wavs_dir.mkdir(parents=True, exist_ok=True)
+    fields = (
+        process_line(
+            line=f"{wavs_dir / 'sample.ogg'}|spk_0000|JP|{text}",
+            wavs_dir=wavs_dir,
+            use_jp_extra=True,
+            use_nanairo=False,
+            yomi_error="raise",
+        )
+        .strip()
+        .split("|")
+    )
+    word2ph = [int(phone_count) for phone_count in fields[6].split()]
+    _, _, _, _, sep_text, _, _ = clean_text_with_given_phone_tone(
+        text=text,
+        language=Languages.JP,
+        use_jp_extra=True,
+        raise_yomi_error=True,
+    )
+
+    # bert_gen.py の extract_bert_feature() は、保存したテキストを text_to_sep_kata() で解析し直して BERT の入力を作る
+    reanalyzed_sep_text = text_to_sep_kata(fields[3], raise_yomi_error=False)[0]
+    assert reanalyzed_sep_text == sep_text
+    assert len(word2ph) == len("".join(reanalyzed_sep_text)) + 2
+
+
+def test_g2p_number_list_middle_dot_has_no_pause_phone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    コアが「1・2年生」の数を並べる中黒に付ける「数の区切り」の印があれば、g2p がその中黒を休止の音素「,」にしないことを確認する。
+    コアは数を並べる中黒を休止なしに読むので、音素列にも休止を入れず、正規化済みテキストの「,」1文字には音素を割り当てない。
+    固定している版のコアはこの印を付けず、数の間の中黒を小数点として読むので、
+    数以外の語の間の中黒 (解析用テキストでは「、」) の語に印を付けて、g2p の扱いだけを確かめる。
+    """
+
+    original_run_frontend = pyopenjtalk_worker.run_frontend
+
+    def run_frontend_with_number_list_mark(
+        text: str, **kwargs: Any
+    ) -> list[NJDFeature]:
+        njd_features = original_run_frontend(text, **kwargs)
+        for njd_feature in njd_features:
+            if njd_feature["string"] == "、":
+                njd_feature["pos_group3"] = "数の区切り"
+        return njd_features
+
+    monkeypatch.setattr(
+        pyopenjtalk_worker, "run_frontend", run_frontend_with_number_list_mark
+    )
+
+    norm_text, phones, tones, word2ph, sep_text, sep_kata, _ = (
+        clean_text_with_given_phone_tone(
+            text="東京・大阪",
+            language=Languages.JP,
+            use_jp_extra=True,
+            raise_yomi_error=False,
+        )
+    )
+
+    assert norm_text == "東京,大阪"
+    assert sep_text is not None
+    assert sep_kata is not None
+    assert sep_text[sep_kata.index("")] == ","
+    assert "," not in phones
+    assert len(word2ph) == len(norm_text) + 2
+    assert word2ph[norm_text.index(",") + 1] == 0
     _assert_phone_tone_word2ph_consistency(phones, tones, word2ph)
 
 

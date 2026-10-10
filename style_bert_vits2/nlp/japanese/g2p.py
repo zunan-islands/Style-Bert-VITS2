@@ -21,6 +21,7 @@ from style_bert_vits2.nlp.symbols import PUNCTUATIONS
 def g2p(
     norm_text: str,
     *,
+    analysis_text: str | None = None,
     use_jp_extra: bool = True,
     use_nanairo: bool = False,
     use_tsqyomi: bool = False,
@@ -40,6 +41,10 @@ def g2p(
 
     Args:
         norm_text (str): 正規化済みテキスト
+        analysis_text (str | None, optional): `normalize_text(return_analysis_text=True)` が返す解析用テキスト。
+            指定した場合は pyopenjtalk の形態素解析にこちらを渡し、「一〇一,」の「,」が桁区切りと読まれるのを防ぐ。
+            sep_text と word2ph は語ごとに replace_punctuation() を通すので、指定しても norm_text の文字に対応する。
+            None の場合は norm_text を形態素解析に渡す。Defaults to None.
         use_jp_extra (bool, optional): False の場合、「ん」の音素を「N」ではなく「n」とする。Defaults to True.
         use_nanairo (bool, optional): Nanairo 専用の絵文字モーラを保持するかどうか。Defaults to False.
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ (デフォルト: False)
@@ -66,7 +71,17 @@ def g2p(
         merged_sep_text: list[str] = []
         merged_sep_kata: list[str] = []
         merged_sep_kata_with_joshi: list[str] = []
-        for segment in split_text_by_nanairo_emoji_symbols(norm_text):
+        segments = split_text_by_nanairo_emoji_symbols(norm_text)
+        # 解析用テキストは句読点の文字だけが違うので、絵文字で同じ数の区間に分かれる
+        analysis_segments = (
+            split_text_by_nanairo_emoji_symbols(analysis_text)
+            if analysis_text is not None
+            else segments
+        )
+        assert len(analysis_segments) == len(segments), (
+            f"{analysis_text} is not split like {norm_text}"
+        )
+        for segment, analysis_segment in zip(segments, analysis_segments):
             if not segment:
                 continue
             if is_nanairo_emoji_symbol(segment) is True:
@@ -86,6 +101,7 @@ def g2p(
                 segment_sep_kata_with_joshi,
             ) = g2p(
                 segment,
+                analysis_text=analysis_segment,
                 use_jp_extra=use_jp_extra,
                 use_nanairo=False,
                 use_tsqyomi=use_tsqyomi,
@@ -121,8 +137,9 @@ def g2p(
     # アクセント割当をしなおすことによって punctuation を含めた音素とアクセントのリストを作る。
 
     # OpenJTalk から NJDFeature のリストを取得
+    ## 解析用テキストがあれば、句読点を「、」「。」のまま渡し、直前の数字が桁区切りや小数点と読まれないようにする
     njd_features = pyopenjtalk.run_frontend(
-        norm_text,
+        analysis_text if analysis_text is not None else norm_text,
         use_tsqyomi=use_tsqyomi,
         jtalk=jtalk,
     )
@@ -281,7 +298,11 @@ def text_to_sep_kata(
         処理すべきは `yomi` が `、` の場合のみのはず。
         """
         assert yomi != "", f"Empty yomi: {word}"
-        if yomi == "、":
+        # コアは「1・2年生」の数を並べる中黒に「数の区切り」の印を付け、休止を置かずに読む
+        ## 音素列にも休止の「,」を入れず、正規化済みテキストの「,」1文字には音素を割り当てない
+        if parts["pos_group3"] == "数の区切り":
+            yomi = ""
+        elif yomi == "、":
             # スラッシュは pyopenjtalk での形態素解析処理で重要なので例外的に正規化後も残しており、
             # ここでスラッシュが返ってきている場合はスラッシュを含めた辞書エントリに引っ掛からなかったということなので、
             # 通常通り "/" を "." 扱いで処理する
@@ -988,8 +1009,10 @@ if __name__ == "__main__":
         sys.exit(1)
     bert_models.load_tokenizer(Languages.JP)
     start = time.time()
+    normalization_result = normalize_text(sys.argv[1], return_analysis_text=True)
     phones, tones, word2ph, sep_text, sep_kata, sep_kata_with_joshi = g2p(
-        normalize_text(sys.argv[1])
+        normalization_result.text,
+        analysis_text=normalization_result.analysis_text,
     )
     end = time.time()
     print(f"time: {end - start:.4f}s")

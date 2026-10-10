@@ -33,10 +33,15 @@ class NormalizationDetail(BaseModel):
 
 
 class NormalizationResult(BaseModel):
-    """正規化済みテキストと、発話内容を変えた置換区間。"""
+    """正規化済みテキストと、発話内容を変えた置換区間と、pyopenjtalk に渡す解析用テキスト。"""
 
     text: str
+    # return_details=True のときだけ集め、それ以外は空にする
     details: tuple[NormalizationDetail, ...]
+    # text の句読点を音素用の「,」「.」に置き換える前の「、」「。」に戻したテキスト
+    ## pyopenjtalk は漢数字や数字の直後の半角「,」「.」を桁区切りや小数点として読むので、形態素解析にはこちらを渡す
+    ## for_irodori=True では句読点を音素用に置き換えないので、text と同じになる
+    analysis_text: str
 
 
 # C2K / NGram の初期化
@@ -525,6 +530,19 @@ __LONG_KANJI_DIGIT_SEQUENCE_PATTERN = re.compile(r"[一二三四五六七八九�
 # `〇` を含む2桁以上の漢数字列は、年・割合など各文字が1桁を表す位取り表記として扱う
 ## 非ゼロ漢数字も必要条件にすることで、伏せ字の `〇〇` を数字へ変えない
 __KANJI_ZERO_DIGIT_SEQUENCE_PATTERN = re.compile(r"[一二三四五六七八九〇]{2,}")
+# 「〇・五％」「一・〇倍」のように中黒を小数点に使う縦書きの小数を検出する
+## 「〇」は伏せ字の「マル」にも位取りの数字にもせず、漢数字のままコアに渡して小数か数の並びかを決めさせる
+## 「〇〇・〇〇さん」のように「〇」だけでできた伏せ字の並びは、呼び出し元で除外する
+__KANJI_VERTICAL_DECIMAL_PATTERN = re.compile(
+    r"[一二三四五六七八九〇]+・[一二三四五六七八九〇]+"
+)
+# 文の終わりの全角の「．」を検出する
+## 「１．５」「三．五％」の小数点、「Ｓｔ．」「ｅｔｃ．」「Ｑ１．」の英字の略語や番号の「．」、「６．１．」の節番号の「．」、「．．．」の三点リーダーは除外する
+## 曲目の番号に続く「十五．二人の銀座」の「二人」「一人」は語なので、その前の「．」は文の終わりとして扱う
+__FULLWIDTH_SENTENCE_PERIOD_PATTERN = re.compile(
+    r"(?<![A-Za-zＡ-Ｚａ-ｚ．.])(?<![A-Za-zＡ-Ｚａ-ｚ．.][0-9０-９])(?<![A-Za-zＡ-Ｚａ-ｚ．.][0-9０-９]{2})．"
+    r"(?=[一二]人|(?![0-9０-９A-Za-zＡ-Ｚａ-ｚ〇零一二三四五六七八九十百千万億兆．.]))"
+)
 # 「五十九.二」「三十九.〇」の漢数字に挟まれた小数点を検出する
 ## 「平成十三.四.六」のように点が続く日付や節番号、小数部に十を含む「三.二十一」の月日、元号に続く「平成十三.四月」の年月は除外する
 __KANJI_DECIMAL_PATTERN = re.compile(
@@ -1166,6 +1184,20 @@ __PUNCTUATION_CLEANUP_PATTERN = re.compile(
     + "".join(re.escape(p) for p in (PUNCTUATIONS + ["/", "—", "@", "＠", "&", "＆"]))
     + r"]+"
 )
+# 解析用テキストで、音素用の「,」「.」へ置き換えずに残す句読点
+## pyopenjtalk は漢数字や数字の直後の半角「,」「.」を桁区切りや小数点として読むので、形態素解析には「、」「。」のまま渡す
+__ANALYSIS_PUNCTUATION_MAP = {",": "、", ".": "。"}
+# 解析用テキストで、数と数の間にある中黒を検出する
+## 「1・2年生」の数を並べる区切りは休止なしに読み、「〇・五％」の縦書きの小数点は小数として読むことを、コアが前後の数と単位から決める
+## 「統一・一本化」のように漢字の語の一部になっている漢数字の後の中黒は、数の間の中黒にしない
+__ANALYSIS_NUMBER_MIDDLE_DOT_PATTERN = re.compile(
+    r"(?:[0-9]|(?<![\u3400-\u9fff々〆ヶ])[〇一二三四五六七八九十百千万]+)(・)"
+    r"(?=[0-9〇一二三四五六七八九十百千万])"
+)
+# 解析用テキストで残す文字種を表すパターン (「、」「。」と、数の間の「・」も残す)
+__ANALYSIS_PUNCTUATION_CLEANUP_PATTERN = re.compile(
+    __PUNCTUATION_CLEANUP_PATTERN.pattern.removesuffix(r"]+") + r"、。・]+"
+)
 __IRODORI_PUNCTUATION_CLEANUP_PATTERN = re.compile(
     r"[^"
     + __JAPANESE_TEXT_CLEANUP_CHAR_CLASS
@@ -1204,6 +1236,10 @@ __IRODORI_PUNCTUATION_CLEANUP_PATTERN = re.compile(
         )
     )
     + r"]+"
+)
+# Irodori-TTS 向けの解析用テキストで残す文字種を表すパターン (数の間の「・」も残す)
+__IRODORI_ANALYSIS_PUNCTUATION_CLEANUP_PATTERN = re.compile(
+    __IRODORI_PUNCTUATION_CLEANUP_PATTERN.pattern.removesuffix(r"]+") + r"・]+"
 )
 
 
@@ -1263,9 +1299,21 @@ def __normalize_kanji_and_separators(text: str) -> str:
 
     # 4. 〇と非ゼロ漢数字が連続する位取り表記を半角数字に変換する
     ## `七〇` や `二〇二六` は各文字が1桁を表す一方、`〇〇` は伏せ字として残す
+    ## 「一〇・五％」のように中黒を小数点に使う縦書きの小数は、漢数字のままコアに渡す
+    vertical_decimal_spans = [
+        match.span()
+        for match in __KANJI_VERTICAL_DECIMAL_PATTERN.finditer(text)
+        if set(match.group()) != {"〇", "・"}
+    ]
+
     def convert_kanji_zero_digit_sequence(match: re.Match[str]) -> str:
         sequence = match.group()
         if "〇" not in sequence or all(character == "〇" for character in sequence):
+            return sequence
+        if any(
+            start <= match.start() and match.end() <= end
+            for start, end in vertical_decimal_spans
+        ):
             return sequence
         return sequence.translate(__KANJI_TO_DIGIT_TABLE)
 
@@ -1279,7 +1327,16 @@ def __normalize_kanji_and_separators(text: str) -> str:
     # ここで残っている〇は数値コンテキスト外のもの（ふせ字・伏せ字、プレースホルダー等）
     # 〇 (U+3007) は Unicode カテゴリ Nl のため最終的な文字フィルタで除去されてしまうので、
     # ここでカタカナ「マル」に変換して読みを保持する
-    text = text.replace("\u3007", "マル")
+    ## 「〇・五％」のような縦書きの小数の「〇」は数なので、漢数字のまま残す
+    text = re.sub(
+        __KANJI_VERTICAL_DECIMAL_PATTERN.pattern + r"|\u3007",
+        lambda match: (
+            match.group()
+            if "・" in match.group() and set(match.group()) != {"〇", "・"}
+            else match.group().replace("\u3007", "マル")
+        ),
+        text,
+    )
 
     return text
 
@@ -1290,6 +1347,7 @@ def normalize_text(
     *,
     for_irodori: bool = False,
     return_details: Literal[False] = False,
+    return_analysis_text: Literal[False] = False,
 ) -> str: ...
 
 
@@ -1299,6 +1357,17 @@ def normalize_text(
     *,
     for_irodori: bool = False,
     return_details: Literal[True],
+    return_analysis_text: bool = False,
+) -> NormalizationResult: ...
+
+
+@overload
+def normalize_text(
+    text: str,
+    *,
+    for_irodori: bool = False,
+    return_details: bool = False,
+    return_analysis_text: Literal[True],
 ) -> NormalizationResult: ...
 
 
@@ -1307,6 +1376,7 @@ def normalize_text(
     *,
     for_irodori: bool = False,
     return_details: bool = False,
+    return_analysis_text: bool = False,
 ) -> str | NormalizationResult:
     """
     日本語のテキストを正規化する。
@@ -1338,9 +1408,12 @@ def normalize_text(
             True のときはテキストエンコーダー入力用に、句読点・括弧・疑問符等を
             全角役物 (、。！？「」… 等) に変換し、通常の日本語文章に近い形にする。
         return_details (bool): 発話内容を置換した区間の由来も返すかどうか。
+        return_analysis_text (bool): pyopenjtalk の形態素解析に渡す解析用テキストも返すかどうか。
+            解析用テキストは、正規化済みテキストの句読点を音素用の「,」「.」に置き換える前の「、」「。」に戻し、
+            数と数の間の中黒を「・」に戻したもの
 
     Returns:
-        str | NormalizationResult: 正規化されたテキスト、または置換区間を含む結果
+        str | NormalizationResult: 正規化されたテキスト、または置換区間・解析用テキストを含む結果
     """
 
     original_text = text
@@ -1358,6 +1431,11 @@ def normalize_text(
         " ",
         text,
     )
+
+    # 文の終わりの全角の「．」を、半角の「.」になる前に「。」にする
+    ## 半角の「.」になると解析用テキストでも「309.次」の小数点と区別できず、コアが「サンビャクキュー」「ジ」と読む
+    ## 正規化済みテキストでは「。」も「.」になるので、変わるのは解析用テキストだけである
+    text = __FULLWIDTH_SENTENCE_PERIOD_PATTERN.sub("。", text)
 
     # 最初にカタカナを除く英数字記号 (ASCII 文字) を半角に変換する
     # どのみち Unicode 正規化で行われる処理ではあるが、__replace_symbols() は Unicode 正規化前に実行しなければ正常に動作しない
@@ -1536,27 +1614,40 @@ def normalize_text(
     # "5090 32G" → "509032G" → 「ゴジュウマンキュウセンサンジュウニ」のような数字連結を防ぐ
     res = __DIGIT_SPACE_DIGIT_PATTERN.sub(r"\1'\2", res)
 
-    # 句読点等正規化、読めない文字を削除
-    res = replace_punctuation(res, for_irodori=for_irodori)
+    def finalize(punctuated_text: str) -> str:
+        # 結合文字の濁点・半濁点を削除
+        # 通常の「ば」等はそのままのこされる、「あ゛」は上で「あ゙」になりここで「あ」になる
+        ## 結合文字の濁点を削除 (る゙ → る) し、結合文字の半濁点を削除 (な゚ → な) する
+        punctuated_text = punctuated_text.replace("\u3099", "").replace("\u309a", "")
 
-    # 結合文字の濁点・半濁点を削除
-    # 通常の「ば」等はそのままのこされる、「あ゛」は上で「あ゙」になりここで「あ」になる
-    res = res.replace("\u3099", "")  # 結合文字の濁点を削除、る゙ → る
-    res = res.replace("\u309a", "")  # 結合文字の半濁点を削除、な゚ → な
-
-    # pyopenjtalk は「漢字の直後に2つ以上の連続する半角ハイフンがある場合」にその漢字の読みが取得できなくなる謎のバグがあるため、
-    # 正規化処理でダッシュが変換されるなどして2つ以上の連続する半角ハイフンが生まれた場合、Long EM Dash に変換してから g2p 処理に渡す
-    res = re.sub(
-        r"([\u4e00-\u9FFF])(-{2,})", lambda m: m.group(1) + "—" * len(m.group(2)), res
-    )
-
-    if return_details is True:
-        return NormalizationResult(
-            text=res,
-            details=__collect_normalization_details(original_text, res, for_irodori),
+        # pyopenjtalk は「漢字の直後に2つ以上の連続する半角ハイフンがある場合」にその漢字の読みが取得できなくなる謎のバグがあるため、
+        # 正規化処理でダッシュが変換されるなどして2つ以上の連続する半角ハイフンが生まれた場合、Long EM Dash に変換してから g2p 処理に渡す
+        return re.sub(
+            r"([\u4e00-\u9FFF])(-{2,})",
+            lambda m: m.group(1) + "—" * len(m.group(2)),
+            punctuated_text,
         )
 
-    return res
+    # 句読点等正規化、読めない文字を削除
+    normalized_text = finalize(replace_punctuation(res, for_irodori=for_irodori))
+
+    if return_details is False and return_analysis_text is False:
+        return normalized_text
+
+    # 解析用テキストは、句読点を「、」「。」のまま、数と数の間の中黒を「・」のまま残し、それ以外は正規化済みテキストと同じ処理を通す
+    ## Irodori-TTS 向けは句読点を音素用の記号へ置き換えないので、正規化済みテキストと違うのは数と数の間の中黒だけになる
+    analysis_text = finalize(
+        replace_punctuation(res, for_irodori=for_irodori, for_analysis=True)
+    )
+    return NormalizationResult(
+        text=normalized_text,
+        details=(
+            __collect_normalization_details(original_text, normalized_text, for_irodori)
+            if return_details is True
+            else ()
+        ),
+        analysis_text=analysis_text,
+    )
 
 
 def __collect_normalization_details(
@@ -2654,7 +2745,8 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         katakana2 = digits_to_katakana(group2, is_shorten_trailing=is_shorten_g2)
         katakana3 = digits_to_katakana(group3, is_shorten_trailing=is_shorten_g3)
 
-        return f"{katakana1},{katakana2},{katakana3}"
+        # 区切りの読点は「、」で書き、最後の replace_punctuation() で音素用の「,」にする
+        return f"{katakana1}、{katakana2}、{katakana3}"
 
     def convert_phone_number_no_hyphen(match: re.Match[str]) -> str:
         """
@@ -2691,7 +2783,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
                 katakana3 = digits_to_katakana(
                     group3, is_shorten_trailing=is_shorten_g3
                 )
-                return f"{katakana1},{katakana2},{katakana3}"
+                return f"{katakana1}、{katakana2}、{katakana3}"
 
         # ここには到達しないはず
         return match.group(0)
@@ -2884,7 +2976,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         return False
 
     # マーカー文字: 電話番号・郵便番号の変換結果の末尾に付加する
-    # マーカーの直後にある半角スペースをカンマに変換し、残ったマーカーは削除する
+    # マーカーの直後にある半角スペースを読点に変換し、残ったマーカーは削除する
     # これにより「郵便番号...ニー 茨城県」→「郵便番号...ニー,茨城県」のようにポーズが入る
     # 一方「マルマルビル 13F」のようなカタカナ建物名の後のスペースは変換されない
     _MARKER = "\u200c"
@@ -2913,7 +3005,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         # 中黒で区切った郵便番号は、中黒で区切った電話番号と同じく0を「ゼロ」として1桁ずつ読み、区切りで間を置く
         if match.group(3) is not None:
             return (
-                f"郵便番号{digits_to_katakana(first3)},"
+                f"郵便番号{digits_to_katakana(first3)}、"
                 f"{digits_to_katakana(match.group(3))}{_MARKER}"
             )
         last4 = match.group(2)
@@ -2939,7 +3031,7 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
         group2 = match.group(2)
         katakana1 = digits_to_katakana(group1, is_shorten_trailing=len(group1) == 3)
         katakana2 = digits_to_katakana(group2)
-        return f"{katakana1},{katakana2}{_MARKER}"
+        return f"{katakana1}、{katakana2}{_MARKER}"
 
     text = __LOCAL_PHONE_AFTER_SYMBOL_PATTERN.sub(
         convert_local_phone_after_symbol, text
@@ -3058,13 +3150,14 @@ def __normalize_phone_postal_address_floor(text: str) -> str:
 
     text = __PHONE_NO_HYPHEN_PATTERN.sub(convert_phone_no_hyphen_with_marker, text)
 
-    # 8. マーカーの直後にある半角スペースをカンマに変換する
+    # 8. マーカーの直後にある半角スペースを読点「、」に変換する
     # これにより TTS で「郵便番号...ニー,茨城県」のようにポーズが入り自然な読み上げになる
+    # 読点は「、」で書き、最後の replace_punctuation() で音素用の「,」にする (解析用テキストで直前の数字の桁区切りと取り違えられないようにするため)
     # ビル名の直後のスペース等はマーカーがないため変換されず、replace_punctuation() で消える
     # 数字 + マーカー + スペース + 数字 は、後段で数字が連結されないよう先に ' に変換する
     # 例: 「試合結果5の3の2 309号」相当の内部表現 -> 「試合結果5の3の2'309号」
     text = __DIGIT_MARKER_SPACE_DIGIT_PATTERN.sub(r"\1'\2", text)
-    text = __MARKER_SPACE_PATTERN.sub(",", text)
+    text = __MARKER_SPACE_PATTERN.sub("、", text)
     text = text.replace(_MARKER, "")
     text = text.replace(_ADDRESS_MARKER, "")
 
@@ -3924,17 +4017,23 @@ def __convert_english_to_katakana(text: str) -> str:
     return "".join(new_words)
 
 
-def replace_punctuation(text: str, *, for_irodori: bool = False) -> str:
+def replace_punctuation(
+    text: str, *, for_irodori: bool = False, for_analysis: bool = False
+) -> str:
     """
     句読点等を正規化し、読み上げに不要な文字を除去する。
 
     for_irodori=False の時、 symbols.PUNCTUATIONS に合わせて「.」「,」「!」「?」「'」「-」等の半角記号へ変換し、
     ひらがな・カタカナ・漢字・数字・アルファベット・ギリシャ文字と共に残す。
     for_irodori=True の時、自然な日本語表記 (。、！？「」… 等) に変換する。
+    for_analysis=True の時、for_irodori=False なら「,」「.」になる句読点を「、」「。」のまま残し、
+    for_irodori の値によらず数と数の間の中黒を「・」のまま残す。
 
     Args:
         text (str): 正規化するテキスト
         for_irodori (bool): Irodori-TTS 向けの正規化ルールを適用するかどうか
+        for_analysis (bool): pyopenjtalk の形態素解析に渡す解析用テキストを作るかどうか。
+            記号の削除は for_analysis=False と同じにして、句読点と中黒の文字以外を正規化済みテキストと一致させる
 
     Returns:
         str: 正規化されたテキスト
@@ -3953,11 +4052,24 @@ def replace_punctuation(text: str, *, for_irodori: bool = False) -> str:
 
         return ""
 
+    # 解析用テキストで「・」のまま残す、数と数の間の中黒の位置
+    number_middle_dot_positions = (
+        {
+            match.start(1)
+            for match in __ANALYSIS_NUMBER_MIDDLE_DOT_PATTERN.finditer(text)
+        }
+        if for_analysis is True
+        else set()
+    )
+
     # Irodori-TTS 向けには異なる正規化ルールを適用
     if for_irodori is True:
 
         def _replace_irodori_symbol(match: re.Match[str]) -> str:
             matched = match.group()
+            # 解析用テキストでは、数と数の間の中黒を「、」にせず「・」のまま残す
+            if match.start() in number_middle_dot_positions:
+                return matched
             return __IRODORI_SYMBOL_REPLACE_MAP[matched]
 
         replaced_text = __IRODORI_SYMBOL_REPLACE_PATTERN.sub(
@@ -3967,18 +4079,36 @@ def replace_punctuation(text: str, *, for_irodori: bool = False) -> str:
         replaced_text = __IRODORI_STRAIGHT_QUOTE_PAIR_PATTERN.sub(
             r"「\1」", replaced_text
         )
-        return __IRODORI_PUNCTUATION_CLEANUP_PATTERN.sub(
+        return (
+            __IRODORI_ANALYSIS_PUNCTUATION_CLEANUP_PATTERN
+            if for_analysis is True
+            else __IRODORI_PUNCTUATION_CLEANUP_PATTERN
+        ).sub(
             lambda match: _remove_unreadable_symbols(match, replaced_text),
             replaced_text,
         )
 
     # 句読点を辞書で置換
+    ## 解析用テキストでは、「,」「.」になる句読点を「、」「。」のまま残し、数と数の間の中黒は「・」のまま残す
     replaced_text = __SYMBOL_REPLACE_PATTERN.sub(
-        lambda x: __SYMBOL_REPLACE_MAP[x.group()], text
+        lambda x: (
+            x.group()
+            if x.start() in number_middle_dot_positions
+            else __ANALYSIS_PUNCTUATION_MAP.get(
+                __SYMBOL_REPLACE_MAP[x.group()], __SYMBOL_REPLACE_MAP[x.group()]
+            )
+            if for_analysis is True
+            else __SYMBOL_REPLACE_MAP[x.group()]
+        ),
+        text,
     )
 
     # 上述以外の文字を削除
-    replaced_text = __PUNCTUATION_CLEANUP_PATTERN.sub(
+    replaced_text = (
+        __ANALYSIS_PUNCTUATION_CLEANUP_PATTERN
+        if for_analysis is True
+        else __PUNCTUATION_CLEANUP_PATTERN
+    ).sub(
         lambda match: _remove_unreadable_symbols(match, replaced_text),
         replaced_text,
     )

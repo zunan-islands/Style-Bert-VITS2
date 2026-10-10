@@ -173,6 +173,50 @@ def extract_bert_feature_onnx(
         raise ValueError(f"Language {language} not supported")
 
 
+def normalize_japanese_text(
+    text: str,
+    *,
+    use_nanairo: bool = False,
+) -> tuple[str, str]:
+    """
+    日本語のテキストを正規化し、正規化済みテキストと、pyopenjtalk の形態素解析に渡す解析用テキストを返す。
+    正規化済みテキストは BERT の入力と word2ph の文字の位置に使うので音素用の句読点にし、
+    解析用テキストは句読点を「、」「。」のまま、数と数の間の中黒を「・」のまま残す。
+
+    学習の前処理は解析用テキストを train.list に保存し、BERT の特徴量の生成 (bert_gen.py) はそれを形態素解析し直す。
+    g2p と同じ解析用テキストを解析し直すことで、word2ph と BERT の入力の単語の分かれ方が一致する。
+
+    Args:
+        text (str): 正規化する日本語のテキスト
+        use_nanairo (bool, optional): Nanairo 専用の絵文字モーラを保持するかどうか。Defaults to False.
+
+    Returns:
+        tuple[str, str]: 正規化済みテキストと解析用テキスト
+    """
+
+    from style_bert_vits2.nlp.japanese.normalizer import normalize_text
+
+    # Nanairo では、まず入力テキスト中の絵文字を Nanairo 定義済み絵文字に正規化し、
+    # その後、絵文字部分のみテキスト正規化対象から除外してそれ以外の部分を通常通り正規化する
+    if use_nanairo is True:
+        text = normalize_nanairo_emoji_text(text)
+    if use_nanairo is True and contains_nanairo_emoji_symbols(text) is True:
+        normalized_segments: list[str] = []
+        analysis_segments: list[str] = []
+        for segment in split_text_by_nanairo_emoji_symbols(text):
+            if is_nanairo_emoji_symbol(segment) is True:
+                normalized_segments.append(segment)
+                analysis_segments.append(segment)
+            elif segment:
+                result = normalize_text(segment, return_analysis_text=True)
+                normalized_segments.append(result.text)
+                analysis_segments.append(result.analysis_text)
+        return "".join(normalized_segments), "".join(analysis_segments)
+
+    result = normalize_text(text, return_analysis_text=True)
+    return result.text, result.analysis_text
+
+
 def _clean_text(
     text: str,
     language: Languages,
@@ -218,24 +262,15 @@ def _clean_text(
     # Changed to import inside if condition to avoid unnecessary import
     if language == Languages.JP:
         from style_bert_vits2.nlp.japanese.g2p import g2p
-        from style_bert_vits2.nlp.japanese.normalizer import normalize_text
 
-        # Nanairo では、まず入力テキスト中の絵文字を Nanairo 定義済み絵文字に正規化し、
-        # その後、絵文字部分のみテキスト正規化対象から除外してそれ以外の部分を通常通り正規化する
-        if use_nanairo is True:
-            text = normalize_nanairo_emoji_text(text)
-        if use_nanairo is True and contains_nanairo_emoji_symbols(text) is True:
-            normalized_segments: list[str] = []
-            for segment in split_text_by_nanairo_emoji_symbols(text):
-                if is_nanairo_emoji_symbol(segment) is True:
-                    normalized_segments.append(segment)
-                elif segment:
-                    normalized_segments.append(normalize_text(segment))
-            norm_text = "".join(normalized_segments)
-        else:
-            norm_text = normalize_text(text)
+        # norm_text は BERT の入力と word2ph の文字の位置に使うので音素用の句読点のまま返し、
+        # pyopenjtalk の形態素解析には句読点を「、」「。」のまま残した解析用テキストを渡す
+        norm_text, analysis_text = normalize_japanese_text(
+            text, use_nanairo=use_nanairo
+        )
         phones, tones, word2ph, sep_text, sep_kata, sep_kata_with_joshi = g2p(
             norm_text,
+            analysis_text=analysis_text,
             use_jp_extra=use_jp_extra,
             use_nanairo=use_nanairo,
             use_tsqyomi=use_tsqyomi,

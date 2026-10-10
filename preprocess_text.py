@@ -13,9 +13,13 @@ from random import sample
 
 from tqdm import tqdm
 
+from style_bert_vits2.constants import Languages
 from style_bert_vits2.logging import logger
 from style_bert_vits2.models.hyper_parameters import HyperParameters
-from style_bert_vits2.nlp import clean_text_with_given_phone_tone
+from style_bert_vits2.nlp import (
+    clean_text_with_given_phone_tone,
+    normalize_japanese_text,
+)
 from style_bert_vits2.nlp.japanese import pyopenjtalk_worker
 from style_bert_vits2.nlp.japanese.user_dict import update_dict
 from style_bert_vits2.utils.paths import (
@@ -83,6 +87,7 @@ def process_line(
 
     Returns:
         str: 処理済みの行（utt|spk|language|norm_text|phones|tones|word2ph 形式）
+            日本語の norm_text の列には、g2p が形態素解析した解析用テキストを保存する
 
     Raises:
         ValueError: 行のフォーマットが不正な場合
@@ -109,6 +114,11 @@ def process_line(
         use_nanairo=use_nanairo,
         raise_yomi_error=(yomi_error != "use"),
     )
+    # BERT の特徴量の生成 (bert_gen.py) は、保存したテキストを形態素解析し直して word2ph と同じ単語に分ける
+    ## g2p は句読点を「、」「。」のまま残した解析用テキストを形態素解析するので、日本語は解析用テキストを保存する
+    ## 「.」に置き換えた正規化済みテキストを保存すると、「1234.」を「千二百三十四」と解析し直して word2ph と文字数が食い違う
+    if language == Languages.JP:
+        _, norm_text = normalize_japanese_text(text, use_nanairo=use_nanairo)
 
     # パスを正規化: wavs/ からの相対パスに統一、スラッシュで統一
     utt_path = Path(utt)
