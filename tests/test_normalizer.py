@@ -1490,6 +1490,28 @@ def test_normalize_text_kanji_decimal_point(
     assert normalize_text(text, for_irodori=for_irodori) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 曲目の番号の後の「二人の銀座」は、小数の「点二」ではなく「フタリ」と読む
+        ("十五．二人の銀座", "十五.二人の銀座", "十五。二人の銀座"),
+        # 元号と年の間に空白があっても、「平成　十三．四月」は和暦の年月なので小数点にしない
+        ("平成　十三．四月", "平成,十三.四月", "平成、十三。四月"),
+        # 漢数字の小数は、従来どおり「点」で読む
+        ("五十九．二", "五十九点二", "五十九点二"),
+    ],
+)
+def test_normalize_text_kanji_decimal_point_excludes_item_numbers_and_spaced_era(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    曲目の番号の「十五．二人の銀座」が「十五点二人」と小数に読まれず、空白を挟んだ元号の「平成　十三．四月」も「十三点四月」にならないことを確認する。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
 def test_normalize_text_circle_to_maru() -> None:
     """
     電話番号や住所などの数値コンテキスト外にある丸系文字（〇、○、◯、⭕、⚪ 等）が、伏字やプレースホルダーの「マル」として読まれることを確認する。
