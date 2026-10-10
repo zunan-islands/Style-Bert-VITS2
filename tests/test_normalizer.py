@@ -2570,6 +2570,28 @@ def test_normalize_text_dates():
     assert normalize_text("BC356") == "ビーシー356"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 小数点の後の「01秒」は月日や時刻のゼロ埋めではないので、0を落とさない
+        ("0.01秒差で負けた", "0.01秒差で負けた", "零点零一秒差で負けた"),
+        ("9.05秒", "9.05秒", "九点零五秒"),
+        # 月日や時刻のゼロ埋めは、従来どおり落とす
+        ("05月01日", "5月1日", "5月1日"),
+    ],
+)
+def test_normalize_text_zero_padding_keeps_decimal_digits(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「0.01秒」の小数点の後の「01」が、月日や時刻のゼロ埋めと取り違えられて「0.1秒」にならないことを確認する。
+    0を落とすと、コアが「レーテンイチビョー」と10倍の値で読む。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
 def test_normalize_text_time():
     """
     コロン区切りの時刻表記や午前・午後を伴う時刻表現が、適切な日本語の時刻読みへ正規化されることを確認する。

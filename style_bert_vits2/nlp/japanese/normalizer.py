@@ -132,7 +132,9 @@ __KAOMOJI_PATTERN = re.compile(
     r"[ヾヽ]?([（(])[ \t\u3000]*[≧≥>＞][ \t\u3000]*[∇▽△ω_]"
     r"[ \t\u3000]*[≦≤<＜][ \t\u3000]*([）)])(?:[ノﾉ](?![ァ-ヶーｦ-ﾟ]))?"
 )
-__DATE_ZERO_PADDING_PATTERN = re.compile(r"(?<!\d)0(\d)(?=月|日|時|分|秒)")
+# 月・日・時・分・秒のゼロ埋めを検出する
+## 「0.01秒」の小数点の後の「01」はゼロ埋めではないので除く
+__DATE_ZERO_PADDING_PATTERN = re.compile(r"(?<![\d.])0(\d)(?=月|日|時|分|秒)")
 __WEEKDAY_PATTERN = re.compile(
     r"("  # 日付部分をキャプチャ開始
     r"(?:\d{4}年\s*)?"  # 4桁の年 + 年（省略可）
