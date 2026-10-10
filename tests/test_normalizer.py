@@ -293,7 +293,7 @@ def test_normalize_text_return_details_keeps_str_compatibility_for_irodori():
 @pytest.mark.parametrize(
     ("text", "category", "original_text", "normalized_text"),
     [
-        ("#", "symbol", "#", "シャープ"),
+        ("†", "symbol", "†", "ダガー"),
         ("2.5%", "percentage", "2.5%", "二ー点五パーセント"),
         ("25℃", "unit", "25℃", "25度"),
         ("3‰", "symbol", "‰", "パーミル"),
@@ -4880,6 +4880,84 @@ def test_normalize_text_decorative_plus_signs(
     """
     「＋＋お知らせ＋＋」「★＋☆＋★」のように装飾として並べた「＋」が「プラスプラス」と読まれず除かれることを確認する。
     「C++」「Streaming+」「これ＋これ」のような語に付く「＋」は、従来どおり「プラス」と読む。
+    """
+
+    assert normalize_text(text) == expected
+    assert normalize_text(text, for_irodori=True) == expected_irodori
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_details"),
+    [
+        ("#06", [("number", "#06", "ナンバー06")]),
+        ("白＃二十八", [("number", "＃二十八", "ナンバー二十八")]),
+        ("＃タグ", [("symbol", "＃タグ", "タグ")]),
+        ("「#」キー", [("symbol", "#", "シャープ")]),
+    ],
+)
+def test_normalize_text_return_details_number_sign(
+    text: str, expected_details: list[tuple[str, str, str]]
+) -> None:
+    """
+    「＃」を「ナンバー」と読む番号、読まずに除くハッシュタグ、「シャープ」と読む単独の「#」が、置換区間の details に実際の出力のとおり記録されることを確認する。
+    「#06」の「#」を削除したと記録すると、details から原文を復元するときに「#ナンバー06」と文字が増える。
+    """
+
+    result = normalize_text(text, for_irodori=True, return_details=True)
+
+    assert [
+        (detail.category, detail.original_text, detail.normalized_text)
+        for detail in result.details
+    ] == expected_details
+    for detail in result.details:
+        assert text[detail.original_start : detail.original_end] == detail.original_text
+        assert (
+            result.text[detail.normalized_start : detail.normalized_end]
+            == detail.normalized_text
+        )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "expected_irodori"),
+    [
+        # 数字の前の「＃」は番号なので「ナンバー」と読む
+        (
+            "＃５＜アトラクション＞",
+            "ナンバー5アトラクション",
+            "ナンバー5アトラクション",
+        ),
+        ("#06", "ナンバー06", "ナンバー06"),
+        ("白＃二十八", "白ナンバー二十八", "白ナンバー二十八"),
+        # HTML の文字参照の「&#」は番号ではないので、「ナンバー」と読まない
+        ("＆＃一万二千五百七十二；", "&一万二千五百七十二,", "&一万二千五百七十二、"),
+        # ハッシュタグや顔文字の「＃」は読まない
+        ("＃タグ", "タグ", "タグ"),
+        ("#タグ付けして投稿", "タグ付けして投稿", "タグ付けして投稿"),
+        ("（＃＾．＾＃）", "'.'", "（。）"),
+        ("#おうち時間", "おうち時間", "おうち時間"),
+        # 漢数字で始まっても、後ろに漢字が続くハッシュタグは番号ではないので読まない
+        ("#千葉", "千葉", "千葉"),
+        ("#一人旅", "一人旅", "一人旅"),
+        # 鉤括弧で囲んだり助詞を続けたりして「#」そのものを指すときは、「シャープ」と読む
+        (
+            "「#」キーを押してください",
+            "'シャープ'キーを押してください",
+            "「シャープ」キーを押してください",
+        ),
+        ("#を押してください", "シャープを押してください", "シャープを押してください"),
+        # 英字の後の「#」は、プログラミング言語や音名なので「シャープ」と読む
+        ("C#", "Cシャープ", "Cシャープ"),
+        ("F#の曲", "Fシャープの曲", "Fシャープの曲"),
+        ("ド♯", "ドシャープ", "ドシャープ"),
+    ],
+)
+def test_normalize_text_number_sign(
+    text: str, expected: str, expected_irodori: str
+) -> None:
+    """
+    「＃５」「#06」のように数字の前の「＃」が「ナンバー」と読まれ、ハッシュタグや顔文字の「＃」は「シャープ」と読まれずに除かれることを確認する。
+    「「#」キー」「#を押して」のように「#」そのものを指すときは除かずに「シャープ」と読み、操作の対象が消えないようにする。
+    「C#」「F#」のように英字の後の「#」は、従来どおり「シャープ」と読む。
     """
 
     assert normalize_text(text) == expected

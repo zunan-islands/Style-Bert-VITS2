@@ -308,6 +308,21 @@ __DECORATIVE_PLUS_PATTERN = re.compile(
     r"(?<![A-Za-z0-9ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々Α-Ωα-ω+ \u3000)\]」』】》〉/])[ \u3000]*\+[ \u3000]*"
     r"(?![A-Za-z0-9ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々Α-Ωα-ω+ \u3000(\[「『【《〈/])"
 )
+# 数字の前の「#」(「＃５」「#06」「白＃二十八」) を検出する
+## 「C#」「F#」のように英字の後の「#」はプログラミング言語や音名なので、HTML の文字参照の「&#」は番号ではないので対象外にする
+## 漢数字の後ろに漢字が続く「#千葉」「#一人旅」は、番号ではなくハッシュタグなので対象外にする
+__NUMBER_SIGN_BEFORE_DIGIT_PATTERN = re.compile(
+    r"(?<![A-Za-z&])#(?=[ \u3000]?(?:[0-9]|[〇一二三四五六七八九十百千]+(?![\u3400-\u4DBF\u4E00-\u9FFF々])))"
+)
+# 読まずに除く「#」(ハッシュタグの「＃タグ」、顔文字の「（＃＾．＾＃）」) を検出する
+## ハッシュタグは「#」の直後に語が続くもので、「#を押して」のように助詞1文字が続くものは「#」そのものを指すので除かない
+## 顔文字は「#」の前後に「^」などの顔の部品が続くもので、「「#」キー」のように単独で使う「#」は記号辞書で「シャープ」と読む
+## 英字の後の「C#」と、キーキャップの絵文字「#️⃣」は除く
+__NUMBER_SIGN_TO_DROP_PATTERN = re.compile(
+    r"(?<![A-Za-z])#"
+    r"(?=[A-Za-z0-9_ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々])(?![をがはにでともへのや](?![ぁ-ん]))"
+    r"|(?<![A-Za-z])(?<=[\^´`;ω∀▽])#|(?<![A-Za-z])#(?=[\^´`;ω∀▽])"
+)
 
 # 記号などの読み正規化マップ
 # 一度リストアップしたがユースケース上不要と判断した記号はコメントアウトされている
@@ -1859,6 +1874,31 @@ def __collect_normalization_details(
                     (match.start(), match.end() + number.end(), "number", 38)
                 )
 
+    # 「ナンバー」と読む「#」は後ろの番号まで、読まずに除くハッシュタグの「#」は後ろの語まで、顔文字の「#」は隣の顔の部品までを1つの区間にする
+    ## 「#」だけを再変換すると「シャープ」になり、全文の「ナンバー」や削除と食い違う
+    for match in __NUMBER_SIGN_BEFORE_DIGIT_PATTERN.finditer(search_text):
+        number = re.match(
+            r"[ \u3000]?(?:[0-9]+|[〇一二三四五六七八九十百千]+)",
+            search_text[match.end() :],
+        )
+        if number is not None:
+            candidates.append((match.start(), match.end() + number.end(), "number", 37))
+    for match in __NUMBER_SIGN_TO_DROP_PATTERN.finditer(search_text):
+        start, end = match.span()
+        ## 数字が続く「#」は、前段の「ナンバー」や短縮ダイヤルの区間になるので、ハッシュタグの語に含めない
+        hashtag_word = re.match(
+            r"[A-Za-z_ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々]"
+            r"[A-Za-z0-9_ぁ-んァ-ヶー\u3400-\u4DBF\u4E00-\u9FFF々]*",
+            search_text[end:],
+        )
+        if hashtag_word is not None:
+            end += hashtag_word.end()
+        elif re.match(r"[\^´`;ω∀▽]", search_text[end:]) is not None:
+            end += 1
+        elif start > 0:
+            start -= 1
+        candidates.append((start, end, "symbol", 50))
+
     # 数値と百分率記号は一つの発話内容になるため、数値部分を分割しない
     candidates.extend(
         (match.start(), match.end(), "percentage", 0)
@@ -2674,6 +2714,11 @@ def __replace_symbols(text: str) -> str:
 
     # 見出しの前後の「＋＋」や記号に挟まれた「＋」は装飾なので、「プラス」と読まずに除く
     text = __DECORATIVE_PLUS_PATTERN.sub("", text)
+
+    # 数字の前の「#」は番号なので「ナンバー」と読み、ハッシュタグや顔文字の「#」は読まずに除く
+    ## 英字の後の「C#」「F#」は、後段の記号辞書で「シャープ」と読む
+    text = __NUMBER_SIGN_BEFORE_DIGIT_PATTERN.sub("ナンバー", text)
+    text = __NUMBER_SIGN_TO_DROP_PATTERN.sub("", text)
 
     # 記号類を辞書で置換
     text = __SYMBOL_YOMI_PATTERN.sub(lambda x: __SYMBOL_YOMI_MAP[x.group()], text)
