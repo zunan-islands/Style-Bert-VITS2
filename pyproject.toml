@@ -37,7 +37,7 @@ dependencies = [
     "num2words",
     "numpy>=2.0",
     "pydantic>=2.0",
-    "pyopenjtalk-plus>=0.4.1.post9",
+    "pyopenjtalk-plus>=0.4.1.post10",
     "pypinyin",
     "pyworld-prebuilt>=0.3.5.post2",
     "safetensors",
