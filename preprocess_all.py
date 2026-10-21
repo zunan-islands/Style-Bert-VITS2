@@ -2,13 +2,9 @@ import argparse
 from multiprocessing import cpu_count
 
 from gradio_tabs.train import preprocess_all
-from style_bert_vits2.nlp.japanese import pyopenjtalk_worker
 from style_bert_vits2.nlp.japanese.user_dict import update_dict
 from style_bert_vits2.utils.paths import add_model_argument
 
-
-# このプロセスからはワーカーを起動して辞書を使いたいので、ここで初期化
-pyopenjtalk_worker.initialize_worker()
 
 # dict_data/ 以下の辞書データを pyopenjtalk に適用
 update_dict()

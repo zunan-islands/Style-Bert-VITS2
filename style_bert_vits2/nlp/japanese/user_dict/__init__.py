@@ -12,10 +12,10 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import numpy as np
+import pyopenjtalk
 from fastapi import HTTPException
 
 from style_bert_vits2.constants import DEFAULT_USER_DICT_DIR
-from style_bert_vits2.nlp.japanese import pyopenjtalk_worker as pyopenjtalk
 from style_bert_vits2.nlp.japanese.user_dict.part_of_speech_data import (
     MAX_PRIORITY,
     MIN_PRIORITY,

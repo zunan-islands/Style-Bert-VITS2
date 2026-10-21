@@ -2,12 +2,12 @@ import re
 import sys
 from typing import TypedDict
 
+import pyopenjtalk
 from pyopenjtalk import NJDFeature, OpenJTalk
 
 from style_bert_vits2.constants import Languages
 from style_bert_vits2.logging import logger
 from style_bert_vits2.nlp import bert_models
-from style_bert_vits2.nlp.japanese import pyopenjtalk_worker as pyopenjtalk
 from style_bert_vits2.nlp.japanese.mora_list import MORA_KATA_TO_MORA_PHONEMES, VOWELS
 from style_bert_vits2.nlp.japanese.normalizer import replace_punctuation
 from style_bert_vits2.nlp.nanairo_emoji import (

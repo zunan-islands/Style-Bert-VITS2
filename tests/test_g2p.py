@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import pyopenjtalk
 import pytest
 from num2words import num2words
 from pyopenjtalk import NJDFeature
@@ -13,7 +14,6 @@ from pyopenjtalk import NJDFeature
 from preprocess_text import process_line
 from style_bert_vits2.constants import Languages
 from style_bert_vits2.nlp import InvalidPhoneError, clean_text_with_given_phone_tone
-from style_bert_vits2.nlp.japanese import pyopenjtalk_worker
 from style_bert_vits2.nlp.japanese.g2p import text_to_sep_kata
 from style_bert_vits2.nlp.japanese.g2p_utils import (
     kata_tone2phone_tone,
@@ -776,7 +776,7 @@ def test_g2p_number_list_middle_dot_has_no_pause_phone(
     数以外の語の間の中黒 (解析用テキストでは「、」) の語に印を付けて、g2p の扱いだけを確かめる。
     """
 
-    original_run_frontend = pyopenjtalk_worker.run_frontend
+    original_run_frontend = pyopenjtalk.run_frontend
 
     def run_frontend_with_number_list_mark(
         text: str, **kwargs: Any
@@ -787,9 +787,7 @@ def test_g2p_number_list_middle_dot_has_no_pause_phone(
                 njd_feature["pos_group3"] = "数の区切り"
         return njd_features
 
-    monkeypatch.setattr(
-        pyopenjtalk_worker, "run_frontend", run_frontend_with_number_list_mark
-    )
+    monkeypatch.setattr(pyopenjtalk, "run_frontend", run_frontend_with_number_list_mark)
 
     norm_text, phones, tones, word2ph, sep_text, sep_kata, _ = (
         clean_text_with_given_phone_tone(

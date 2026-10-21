@@ -20,7 +20,6 @@ from style_bert_vits2.nlp import (
     clean_text_with_given_phone_tone,
     normalize_japanese_text,
 )
-from style_bert_vits2.nlp.japanese import pyopenjtalk_worker
 from style_bert_vits2.nlp.japanese.user_dict import update_dict
 from style_bert_vits2.utils.paths import (
     TrainingModelPaths,
@@ -29,9 +28,6 @@ from style_bert_vits2.utils.paths import (
 )
 from style_bert_vits2.utils.stdout_wrapper import SAFE_STDOUT
 
-
-# このプロセスからはワーカーを起動して辞書を使いたいので、ここで初期化
-pyopenjtalk_worker.initialize_worker()
 
 # dict_data/ 以下の辞書データを pyopenjtalk に適用
 update_dict()
