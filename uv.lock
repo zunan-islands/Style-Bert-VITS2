@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "(python_full_version >= '3.14' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.14' and platform_machine == 'AMD64' and sys_platform == 'win32')",
@@ -51,7 +51,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8d/75/94cd5d389649578aca399e5aa822637eec18319a1dadc400ffe2f9a7493f/accelerate-1.14.0.tar.gz", hash = "sha256:41b9c4377a54e0b460a959b0defa1b736e4ca0a2373252d9a539964c2afe3c8d", size = 412167, upload-time = "2026-06-11T13:45:52.326Z" }
@@ -236,7 +236,7 @@ dependencies = [
     { name = "librosa" },
     { name = "numpy" },
     { name = "speechbrain" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/ca/4918776b0ed569b3e6b71e6bbfa4670e53a37d82e67b66b09ce370e0c2ab/anime_speaker_embedding-0.2.1.tar.gz", hash = "sha256:d5264a3ee0856e8cc4fb7e4610920389b11388b25791c277944cbd99acba3bf3", size = 97894, upload-time = "2025-06-22T10:42:43.373Z" }
@@ -281,7 +281,7 @@ version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "typing-extensions" },
 ]
@@ -1570,7 +1570,7 @@ name = "julius"
 version = "0.2.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1d/c6/5c2aea2b11ead1680bb5b17c996def31f8ccade471cada37cdb93855e06f/julius-0.2.8.tar.gz", hash = "sha256:d691e651200930affea4f6c849c26e95fec846087281ae3d1a7757eac90253d5", size = 48081, upload-time = "2026-06-03T16:05:34.52Z" }
@@ -1733,7 +1733,7 @@ dependencies = [
     { name = "packaging" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "torchmetrics" },
     { name = "tqdm" },
@@ -3283,12 +3283,12 @@ dependencies = [
     { name = "pytorch-metric-learning" },
     { name = "rich" },
     { name = "safetensors" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "torch-audiomentations" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchcodec", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchcodec", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchcodec", version = "0.16.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "torchmetrics" },
 ]
@@ -3655,7 +3655,7 @@ dependencies = [
     { name = "lightning-utilities" },
     { name = "packaging" },
     { name = "pyyaml" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "torchmetrics" },
     { name = "tqdm" },
@@ -3673,7 +3673,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "scikit-learn" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "tqdm" },
 ]
@@ -4399,9 +4399,9 @@ dependencies = [
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "sentencepiece" },
     { name = "soundfile" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "tqdm" },
 ]
@@ -4509,6 +4509,7 @@ wheels = [
 name = "style-bert-vits2"
 version = "2.7.0"
 source = { editable = "." }
+default-groups = ["core"]
 dependencies = [
     { name = "aivmlib" },
     { name = "cmudict" },
@@ -4540,7 +4541,7 @@ onnxruntime = [
 torch = [
     { name = "accelerate" },
     { name = "numba" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 
@@ -4559,7 +4560,7 @@ core = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "taskipy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 full = [
@@ -4595,11 +4596,11 @@ full = [
     { name = "speechbrain" },
     { name = "taskipy" },
     { name = "tensorboard" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchcodec", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchcodec", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchcodec", version = "0.16.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "umap-learn" },
     { name = "utmosv2" },
@@ -4623,7 +4624,7 @@ server = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "taskipy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "uvicorn" },
 ]
@@ -4646,7 +4647,7 @@ tools = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "taskipy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 train = [
@@ -4671,11 +4672,11 @@ train = [
     { name = "speechbrain" },
     { name = "taskipy" },
     { name = "tensorboard" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchcodec", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchcodec", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchcodec", version = "0.16.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "utmosv2" },
 ]
@@ -4695,7 +4696,7 @@ webui = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "taskipy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "umap-learn" },
 ]
@@ -4726,7 +4727,7 @@ requires-dist = [
     { name = "safetensors" },
     { name = "sentencepiece", specifier = ">=0.2.1,<0.3" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'torch') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'torch')", specifier = ">=2.1", index = "https://download.pytorch.org/whl/cu130" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'torch') or (platform_machine != 'AMD64' and sys_platform == 'win32' and extra == 'torch') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'torch')", specifier = ">=2.1" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64' and extra == 'torch') or (platform_machine == 'AMD64' and sys_platform == 'linux' and extra == 'torch') or (platform_machine == 'x86_64' and sys_platform == 'win32' and extra == 'torch') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'torch')", specifier = ">=2.1" },
     { name = "transformers", specifier = ">=4.49.0,<6.0.0" },
 ]
 provides-extras = ["onnxruntime", "torch"]
@@ -4740,12 +4741,12 @@ core = [
     { name = "onnxruntime", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==1.23.2" },
     { name = "onnxruntime-directml", marker = "sys_platform == 'win32'", specifier = ">=1.24.0,<2.0.0" },
     { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.27.0,<1.30.0" },
-    { name = "pyright" },
-    { name = "pytest" },
+    { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff" },
     { name = "scipy" },
-    { name = "taskipy" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
+    { name = "taskipy", specifier = ">=1.14.1" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.12.1,<2.13.0", index = "https://download.pytorch.org/whl/cu130" },
 ]
 full = [
@@ -4770,21 +4771,21 @@ full = [
     { name = "psutil" },
     { name = "pyannote-audio", specifier = ">=4.0.5" },
     { name = "pyloudnorm" },
-    { name = "pyright" },
-    { name = "pytest" },
+    { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rich" },
     { name = "ruff" },
     { name = "scipy" },
     { name = "speechbrain", specifier = ">=1.1.0" },
-    { name = "taskipy" },
+    { name = "taskipy", specifier = ">=1.14.1" },
     { name = "tensorboard" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.12.1,<2.13.0", index = "https://download.pytorch.org/whl/cu130" },
-    { name = "torchaudio", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.11.0,<2.12.0" },
+    { name = "torchaudio", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.11.0,<2.12.0" },
     { name = "torchaudio", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.11.0,<2.12.0", index = "https://download.pytorch.org/whl/cu130" },
-    { name = "torchcodec", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=0.16.0,<0.17.0" },
+    { name = "torchcodec", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=0.16.0,<0.17.0" },
     { name = "torchcodec", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=0.16.0,<0.17.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "umap-learn" },
     { name = "utmosv2", git = "https://github.com/sarulab-speech/UTMOSv2.git?rev=cc2700db57bb83ee13dc31ebe1b868c254e15d09" },
@@ -4801,13 +4802,13 @@ server = [
     { name = "onnxruntime-directml", marker = "sys_platform == 'win32'", specifier = ">=1.24.0,<2.0.0" },
     { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.27.0,<1.30.0" },
     { name = "psutil" },
-    { name = "pyright" },
-    { name = "pytest" },
+    { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "requests" },
     { name = "ruff" },
     { name = "scipy" },
-    { name = "taskipy" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
+    { name = "taskipy", specifier = ">=1.14.1" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.12.1,<2.13.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "uvicorn" },
 ]
@@ -4823,13 +4824,13 @@ tools = [
     { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.27.0,<1.30.0" },
     { name = "onnxsim-prebuilt", specifier = ">=0.4.39.post2" },
     { name = "protobuf", specifier = ">=4.25" },
-    { name = "pyright" },
-    { name = "pytest" },
+    { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "rich" },
     { name = "ruff" },
     { name = "scipy" },
-    { name = "taskipy" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
+    { name = "taskipy", specifier = ">=1.14.1" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.12.1,<2.13.0", index = "https://download.pytorch.org/whl/cu130" },
 ]
 train = [
@@ -4846,18 +4847,18 @@ train = [
     { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.27.0,<1.30.0" },
     { name = "pyannote-audio", specifier = ">=4.0.5" },
     { name = "pyloudnorm" },
-    { name = "pyright" },
-    { name = "pytest" },
+    { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff" },
     { name = "scipy" },
     { name = "speechbrain", specifier = ">=1.1.0" },
-    { name = "taskipy" },
+    { name = "taskipy", specifier = ">=1.14.1" },
     { name = "tensorboard" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.12.1,<2.13.0", index = "https://download.pytorch.org/whl/cu130" },
-    { name = "torchaudio", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.11.0,<2.12.0" },
+    { name = "torchaudio", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.11.0,<2.12.0" },
     { name = "torchaudio", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.11.0,<2.12.0", index = "https://download.pytorch.org/whl/cu130" },
-    { name = "torchcodec", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=0.16.0,<0.17.0" },
+    { name = "torchcodec", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=0.16.0,<0.17.0" },
     { name = "torchcodec", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=0.16.0,<0.17.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "utmosv2", git = "https://github.com/sarulab-speech/UTMOSv2.git?rev=cc2700db57bb83ee13dc31ebe1b868c254e15d09" },
 ]
@@ -4870,13 +4871,13 @@ webui = [
     { name = "onnxruntime", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==1.23.2" },
     { name = "onnxruntime-directml", marker = "sys_platform == 'win32'", specifier = ">=1.24.0,<2.0.0" },
     { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.27.0,<1.30.0" },
-    { name = "pyright" },
-    { name = "pytest" },
+    { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "pyyaml" },
     { name = "ruff" },
     { name = "scipy" },
-    { name = "taskipy" },
-    { name = "torch", marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
+    { name = "taskipy", specifier = ">=1.14.1" },
+    { name = "torch", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=2.12.1,<2.13.0" },
     { name = "torch", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = ">=2.12.1,<2.13.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "umap-learn" },
 ]
@@ -5009,7 +5010,7 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "torchvision" },
 ]
@@ -5215,10 +5216,10 @@ version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "julius" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "torch-pitch-shift" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/31/8d/2f8fd7e34c75f5ee8de4310c3bd3f22270acd44d1f809e2fe7c12fbf35f8/torch_audiomentations-0.12.0.tar.gz", hash = "sha256:b02d4c5eb86376986a53eb405cca5e34f370ea9284411237508e720c529f7888", size = 52094, upload-time = "2025-01-15T09:07:01.071Z" }
@@ -5233,9 +5234,9 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
     { name = "primepy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/79/a6/722a832bca75d5079f6731e005b3d0c2eec7c6c6863d030620952d143d57/torch_pitch_shift-1.2.5.tar.gz", hash = "sha256:6e1c7531f08d0f407a4c55e5ff8385a41355c5c5d27ab7fa08632e51defbd0ed", size = 4725, upload-time = "2024-09-25T19:10:12.922Z" }
@@ -5391,7 +5392,7 @@ dependencies = [
     { name = "lightning-utilities" },
     { name = "numpy" },
     { name = "packaging" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/34/39b8b749333db56c0585d7a11fa62a283c087bb1dfc897d69fb8cedbefb1/torchmetrics-1.9.0.tar.gz", hash = "sha256:a488609948600df52d3db4fcdab02e62aab2a85ef34da67037dc3e65b8512faa", size = 581765, upload-time = "2026-03-09T17:41:22.443Z" }
@@ -5406,7 +5407,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "pillow" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 wheels = [
@@ -5573,9 +5574,9 @@ dependencies = [
     { name = "librosa" },
     { name = "numpy" },
     { name = "timm" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux') or (platform_machine != 'AMD64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "torchaudio", version = "2.11.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "tqdm" },
     { name = "transformers" },

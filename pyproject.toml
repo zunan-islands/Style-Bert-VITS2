@@ -1,16 +1,11 @@
-[build-system]
-requires = ["uv_build>=0.9.21"]
-build-backend = "uv_build"
-
 [project]
 name = "style-bert-vits2"
 version = "2.7.0"
 description = "Style-Bert-VITS2: Bert-VITS2 with more controllable voice styles."
 readme = "README.md"
-requires-python = ">=3.11"
 license = "AGPL-3.0-only"
 license-files = ["LICENSE", "LGPL_LICENSE"]
-keywords = []
+requires-python = ">=3.11"
 authors = [
     { name = "litagin02", email = "139731664+litagin02@users.noreply.github.com" },
 ]
@@ -84,26 +79,26 @@ torch = [
 ## ONNX Runtime と PyTorch のバージョン・バリアントを固定し、開発ツールも含む
 ## Usage: uv sync (or: uv sync --group core)
 core = [
-    # ONNX Runtime 関連 (project.optional-dependencies.onnxruntime に相当)
-    ## 必須依存関係なので、単体利用時はインストールされるバリアントを上記と同じロジックで固定する
-    "onnxruntime==1.23.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "onnxruntime>=1.24.0,<2.0.0; (sys_platform == 'darwin' and platform_machine != 'x86_64') or (sys_platform == 'linux' and platform_machine != 'x86_64')",
-    "onnxruntime-directml>=1.24.0,<2.0.0; sys_platform == 'win32'",
-    "onnxruntime-gpu>=1.27.0,<1.30.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
     # PyTorch 関連 (project.optional-dependencies.torch に相当)
     ## 単体利用で ONNX 版推論だけ回すユースケースは極めて考えづらいので、常に PyTorch 関連も必須依存関係に含める
     ## PyTorch のバリアントは tool.uv.sources で torch のソース指定で固定している
     "accelerate",
     "numba",
     "torch>=2.12.1,<2.13.0",
+    # ONNX Runtime 関連 (project.optional-dependencies.onnxruntime に相当)
+    ## 必須依存関係なので、単体利用時はインストールされるバリアントを上記と同じロジックで固定する
+    "onnxruntime==1.23.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "onnxruntime>=1.24.0,<2.0.0; (sys_platform == 'darwin' and platform_machine != 'x86_64') or (sys_platform == 'linux' and platform_machine != 'x86_64')",
+    "onnxruntime-directml>=1.24.0,<2.0.0; sys_platform == 'win32'",
+    "onnxruntime-gpu>=1.27.0,<1.30.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
     # 開発関連ツール
     ## 比較的サイズが小さいため core に含める
     "coverage[toml]>=6.5",
-    "pytest",
-    "pyright",
+    "pyright>=1.1.407",
+    "pytest>=9.1.1",
     "ruff",
     "scipy",
-    "taskipy",
+    "taskipy>=1.14.1",
 ]
 ## ONNX 変換ツールの依存関係 (convert_onnx.py, convert_bert_onnx.py)
 ## Usage: uv sync --group tools
@@ -162,25 +157,27 @@ full = [
     { include-group = "train" },
 ]
 
-# タスクランナーのタスク定義
-## Usage: uv run task <task-name>
 [tool.taskipy.tasks]
-## リント・フォーマット
+# リント・フォーマット
 lint = "ruff check --fix . ; pyright"
 format = "ruff format ."
 typecheck = "pyright"
-## NLP 関連テスト
+# NLP 関連テスト
 test-g2p = "pytest -s tests/test_g2p.py tests/test_g2p_tsqyomi.py"
 test-normalizer = "pytest -s tests/test_normalizer.py"
-## PyTorch 推論テスト
+# PyTorch 推論テスト
 test = "pytest -s tests/test_main.py::test_synthesize_cpu"
 test-cuda = "pytest -s tests/test_main.py::test_synthesize_cuda"
-## ONNX 推論テスト
+# ONNX 推論テスト
 test-onnx = "pytest -s tests/test_main.py::test_synthesize_onnx_cpu"
 test-onnx-cuda = "pytest -s tests/test_main.py::test_synthesize_onnx_cuda"
 test-onnx-tensorrt = "pytest -s tests/test_main.py::test_synthesize_onnx_tensorrt"
 test-onnx-directml = "pytest -s tests/test_main.py::test_synthesize_onnx_directml"
 test-onnx-coreml = "pytest -s tests/test_main.py::test_synthesize_onnx_coreml"
+
+[build-system]
+requires = ["uv_build>=0.9.21"]
+build-backend = "uv_build"
 
 # uv sync 実行時にデフォルトで core グループがインストールされるようにする
 [tool.uv]
@@ -289,9 +286,7 @@ indent-style = "space"
 [tool.pyright]
 # 型チェック対象の Python バージョンを指定
 pythonVersion = "3.11"
-# TypeCheckingMode を strict に設定（VSCode の設定と同等）
 typeCheckingMode = "strict"
-# プロジェクトルートを指定
 pythonPlatform = "All"
 # インクルードするパッケージパス
 # TODO: 型安全でないコードが多いため、当面一部ファイルのみ型チェックを行わない
@@ -333,7 +328,7 @@ exclude = [
     "**/.venv",
     "**/node_modules",
 ]
-# VSCode の settings.json の diagnosticSeverityOverrides に対応する設定
+# Pyright/Pylance の型チェックのうち、いくつかのエラー報告を抑制する
 reportConstantRedefinition = "none"
 reportDeprecated = "none"  # 修正コストの観点で抑制
 reportGeneralTypeIssues = "warning"
