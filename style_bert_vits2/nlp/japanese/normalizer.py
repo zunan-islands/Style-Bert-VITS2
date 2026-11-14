@@ -752,6 +752,18 @@ __ADDRESS_EXPLICIT_CONTEXT_PATTERN = re.compile(
 __ADDRESS_ADMINISTRATIVE_NAME_PATTERN = re.compile(
     r"[\u3400-\u4DBF\u4E00-\u9FFF々〆ヶ]{1,16}(?:都|道|府|県|市|区|町|村)"
 )
+# 2桁の年の日付と同じ形の住所番地 (「東京都渋谷区渋谷15-10-2」) を日付から外す判定に使う「住所の地名の末尾」パターン
+## 行政区画名か住所を示す語から数字の直前まで、地名に使う漢字だけが続くときにマッチする
+## 「住所変更の期限」「東京都で発売」のように間に助詞などが入るものは、住所と無関係な語に日付が続くとみなしてマッチさせない
+## 住所を示す語の直後は、「住所は赤坂」「所在地:横浜市」のような「は」「が」「:」と空白を許容する
+__ADDRESS_PLACE_NAME_TAIL_PATTERN = re.compile(
+    r"(?:"
+    + __ADDRESS_ADMINISTRATIVE_NAME_PATTERN.pattern
+    + r"|(?:"
+    + __ADDRESS_EXPLICIT_CONTEXT_PATTERN.pattern
+    + r")[はが]?[:：]?[ \u3000]*)"
+    r"[\u3400-\u4DBF\u4E00-\u9FFF々〆ヶ]*$"
+)
 # 「1番2」「1番地2」「543番21」などの番地表記を検出するパターン
 __ADDRESS_JP_NUMBERING_PATTERN = re.compile(r"\d+番(?:地)?(?:\d+)?(?:-\d+)?")
 # 住所ブロック（地番・住居表示）のパターン
@@ -2703,6 +2715,24 @@ def __replace_symbols(text: str) -> str:
         ):
             numerator, denominator = date_str.split("/")
             return f"{num2words(int(denominator), lang='ja')}ぶんの{num2words(int(numerator), lang='ja')}"
+        # 住所の地名の直後の「2桁-数字-数字」は、2桁の年の日付ではなく住所番地として後段の住所の正規化に任せる
+        ## 日付の変換は住所の変換より前に行うので、ここで除外しないと「東京都渋谷区渋谷15-10-2」が「2015年10月2日」と読まれる
+        ## 「期限25-12-31」「東京都で発売25-12-31」のように漢字の語の直後に日付を書くこともあるので、直前の漢字や同じ文の地名だけでは住所と判断せず、
+        ## 行政区画名か住所を示す語から数字の直前まで地名の漢字が続くときだけ住所番地とする (__ADDRESS_PLACE_NAME_TAIL_PATTERN)
+        ## 直前が漢字でないと後段の __ADDRESS_PATTERN が住所番地として拾わないので、漢字の直後であることも条件にする
+        ## スラッシュやドットの区切りと4桁の年は住所番地に使われないので、住所の地名の直後でも日付として読む
+        if (
+            re.fullmatch(r"\d{2}-\d{1,2}-\d{1,2}", date_str) is not None
+            and match.start() > 0
+            and re.fullmatch(r"[\u3400-\u4DBF\u4E00-\u9FFF]", text[match.start() - 1])
+            is not None
+            and text[match.start() - 1] not in __ADDRESS_NON_PLACE_KANJI
+            and __ADDRESS_PLACE_NAME_TAIL_PATTERN.search(
+                text[max(0, match.start() - 64) : match.start()]
+            )
+            is not None
+        ):
+            return date_str
         try:
             # 連続した数字形式（YYYYMMDD）の場合
             if len(date_str) == 8 and date_str.isdigit():
