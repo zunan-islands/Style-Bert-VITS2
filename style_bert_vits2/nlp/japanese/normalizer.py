@@ -680,6 +680,16 @@ __PHONE_HYPHENATED_PATTERN = re.compile(
     r"(\d{1,4})"  # 加入者番号
     r"(?!\d)"
 )
+# 電話番号パターン: 空白区切り（国番号「+81」付きと、先頭が 0 の国内表記）
+# 03 1234 5678 / 090　1234　5678 / 0120 123 456 / +81 90 1234 5678
+## 空白区切りは数の並びと紛れやすいので、前後に空白区切りの数字が続かない3組だけを候補にする
+## 桁数の検証は normalize_text() 内の変換関数で行う
+__PHONE_SPACE_SEPARATED_PATTERN = re.compile(
+    r"(?<![\d.])(?<!\d[ \u3000])"
+    r"(\+81[ \u3000])?"  # 国番号（任意）
+    r"(\d{1,5})[ \u3000](\d{1,4})[ \u3000](\d{3,4})"  # 市外局番・市内局番・加入者番号
+    r"(?!\d)(?![ \u3000]\d)"
+)
 # 電話番号パターン: ハイフンなし（既知のプレフィックスのみマッチ）
 # 携帯: 0X0 + 8桁 = 11桁 (070/080/090/060)
 # フリーダイヤル: 0120 + 6桁 = 10桁
@@ -1662,6 +1672,43 @@ def normalize_text(
     text = jaconv.z2h(
         text, kana=False, digit=True, ascii=True, ignore="\u3000"
     )  # 全角スペースは変換しない
+
+    # 「03 1234 5678」のように空白で区切った電話番号を、ハイフン区切りの電話番号と同じ形にする
+    ## 全角空白は後段で読点に、半角空白は数字連結防止の「'」に変わり、組ごとに「センニヒャクサンジューヨン」と位取りで読まれるため、
+    ## 空白が残っているここでハイフン区切りにそろえ、以降はハイフン区切りの電話番号の経路に任せる
+    def convert_space_separated_phone_number(match: re.Match[str]) -> str:
+        country_code = match.group(1)
+        group1, group2, group3 = match.group(2), match.group(3), match.group(4)
+        # 国番号付きは、市外局番の先頭の 0 を省いた形なので、国内表記に直して桁数を検証する
+        if country_code is not None:
+            if group1.startswith("0"):
+                return match.group(0)
+            domestic_group1 = "0" + group1
+        else:
+            domestic_group1 = group1
+        # 先頭が 0 の市外局番 (2〜5桁) で、合計が日本の電話番号の桁数 (10〜11桁) のものだけを電話番号とする
+        total_digits = len(domestic_group1) + len(group2) + len(group3)
+        if (
+            domestic_group1.startswith("0") is False
+            or not (2 <= len(domestic_group1) <= 5)
+            or not (10 <= total_digits <= 11)
+        ):
+            return match.group(0)
+        # 携帯電話・IP 電話 (0X0) は 3-4-4 の形だけを電話番号とする
+        if (
+            len(domestic_group1) == 3
+            and domestic_group1[2] == "0"
+            and (len(group2) != 4 or len(group3) != 4)
+        ):
+            return match.group(0)
+        # 国番号付きは「+81-90-1234-5678」と同じ形にする
+        if country_code is not None:
+            return f"+81-{group1}-{group2}-{group3}"
+        return f"{group1}-{group2}-{group3}"
+
+    text = __PHONE_SPACE_SEPARATED_PATTERN.sub(
+        convert_space_separated_phone_number, text
+    )
 
     # 「①1回」「①1/2カップ」の丸数字が NFKC で直後の数字と連結して「11回」「1二ぶんの一」にならないよう、読点で区切る
     ## 後段で分数や時刻へ変わる前の数字が残っているうちに区切る
