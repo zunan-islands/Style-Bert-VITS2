@@ -459,6 +459,73 @@ def test_g2p_idiomatic_juunibun_keeps_lexical_reading() -> None:
     assert joined_sep_kata == expected_joined_sep_kata
 
 
+@pytest.mark.parametrize(
+    ("text", "given_text"),
+    [
+        # AivisSpeech Engine のように、同じ文の読みから作った音素列を渡す (音素数が生成結果と一致する)
+        ("こんにちは", "こんにちは"),
+        ("みんなで散歩", "みんなで散歩"),
+        # SSML の sub タグのように、別の読みから作った音素列を渡して、音素数が一致する場合
+        ("漢字", "かんじ"),
+        # 別の読みから作った音素列を渡して、音素数が一致しない場合
+        ("今日", "こんにち"),
+    ],
+)
+def test_clean_text_with_given_phone_tone_converts_moraic_nasal_for_non_jp_extra(
+    text: str, given_text: str
+) -> None:
+    """
+    JP-Extra 式の「N」で「ん」を書いた given_phone を JP-Extra でないモデル向けに渡すと、
+    音素数が生成結果と一致するかどうかにかかわらず、「ん」が学習時と同じ「n」に変換される。
+    """
+
+    # JP-Extra 式の音素列 (「ん」は「N」) を作る
+    _, given_phone, given_tone, _, _, _, _ = clean_text_with_given_phone_tone(
+        text=given_text,
+        language=Languages.JP,
+        use_jp_extra=True,
+        raise_yomi_error=False,
+    )
+    assert "N" in given_phone
+
+    _, phones, tones, word2ph, _, _, _ = clean_text_with_given_phone_tone(
+        text=text,
+        language=Languages.JP,
+        given_phone=given_phone,
+        given_tone=given_tone,
+        use_jp_extra=False,
+        raise_yomi_error=False,
+    )
+
+    assert "N" not in phones
+    assert phones == ["n" if phone == "N" else phone for phone in given_phone]
+    assert tones == given_tone
+    _assert_phone_tone_word2ph_consistency(phones, tones, word2ph)
+
+
+def test_clean_text_with_given_phone_tone_keeps_moraic_nasal_for_jp_extra() -> None:
+    """JP-Extra モデル向けには、given_phone の「ん」を「N」のまま渡す。"""
+
+    _, given_phone, given_tone, _, _, _, _ = clean_text_with_given_phone_tone(
+        text="かんじ",
+        language=Languages.JP,
+        use_jp_extra=True,
+        raise_yomi_error=False,
+    )
+
+    _, phones, _, _, _, _, _ = clean_text_with_given_phone_tone(
+        text="漢字",
+        language=Languages.JP,
+        given_phone=given_phone,
+        given_tone=given_tone,
+        use_jp_extra=True,
+        raise_yomi_error=False,
+    )
+
+    assert phones == given_phone
+    assert "N" in phones
+
+
 def test_clean_text_with_given_phone_tone_nanairo_keeps_emoji_mora() -> None:
     """Nanairo モードでは絵文字モーラを 1 記号として保持する。"""
 

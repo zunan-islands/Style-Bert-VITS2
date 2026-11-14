@@ -399,6 +399,12 @@ def clean_text_with_given_phone_tone(
             raise InvalidPhoneError(
                 f"Length of given_phone ({len(given_phone)}) != length of given_tone ({len(given_tone)})"
             )
+        # use_jp_extra でない場合は given_phone 内の「N」を「n」に変換
+        ## JP-Extra でないモデルは「ん」を「n」として学習しているため、「N」を渡すと「ん」が正しく発音されない
+        ## AivisSpeech Engine や SSML の sub タグのように JP-Extra 式の「N」で書いた given_phone が渡されるので、
+        ## 音素数が _clean_text() の生成結果と一致して word2ph の調整に入らない場合も、必ずここで変換する
+        if language == Languages.JP and not use_jp_extra:
+            given_phone = [p if p != "N" else "n" for p in given_phone]
         # 与えられた音素数と pyopenjtalk で生成した読みの音素数が一致しない
         if len(given_phone) != sum(word2ph):
             # 日本語の場合、len(given_phone) と sum(word2ph) が一致するように word2ph を適切に調整する
@@ -406,9 +412,6 @@ def clean_text_with_given_phone_tone(
             if language == Languages.JP:
                 from style_bert_vits2.nlp.japanese.g2p import adjust_word2ph
 
-                # use_jp_extra でない場合は given_phone 内の「N」を「n」に変換
-                if not use_jp_extra:
-                    given_phone = [p if p != "N" else "n" for p in given_phone]
                 # _clean_text() から取得した word2ph を調整結果で上書き
                 word2ph = adjust_word2ph(word2ph, phone, given_phone)
                 # 上記処理により word2ph の合計が given_phone の長さと一致するはず
