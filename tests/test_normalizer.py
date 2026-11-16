@@ -5,6 +5,8 @@ normalize_text() のテスト。
 新しいテスト関数を追加する際は、対応する処理ステップの位置に挿入すること。
 """
 
+import unicodedata
+
 import pyopenjtalk
 import pytest
 
@@ -6291,8 +6293,17 @@ def test_normalize_text_japanese_unicode_blocks_keep_surface() -> None:
 
     # CJK 拡張 G 以降も、既存の拡張 B〜F と同じく未知語として残す
     assert normalize_text("拡張G𰀀") == "拡張G𰀀"  # U+30000
-    assert normalize_text("拡張H𱍐") == "拡張H𱍐"  # U+31350
-    assert normalize_text("拡張J𲎰") == "拡張J𲎰"  # U+323B0
+    # 拡張 H は Unicode 15.0、拡張 J は Unicode 17.0 で割り当てられたので、実行中の Python の unicodedata がその版以降のときだけ残す
+    ## それより前の版では未割り当てのコードポイントで、BERT のトークナイザーが捨てるため、正規化でも削除する
+    unidata_version = tuple(
+        int(part) for part in unicodedata.unidata_version.split(".")
+    )
+    assert normalize_text("拡張H𱍐") == (
+        "拡張H𱍐" if unidata_version >= (15, 0, 0) else "拡張H"
+    )  # U+31350
+    assert normalize_text("拡張J𲎰") == (
+        "拡張J𲎰" if unidata_version >= (17, 0, 0) else "拡張J"
+    )  # U+323B0
 
     # Irodori-TTS 側も同じ日本語文字範囲を使い、句読点だけ専用表記にする
     assert normalize_text("人〻、変体仮名𛀁", for_irodori=True) == "人人、変体仮名𛀁"
@@ -6316,6 +6327,45 @@ def test_normalize_text_non_japanese_unicode_blocks_are_removed() -> None:
     # 異体字セレクタは発音を持たないため削除するが、直前の漢字は残す
     assert normalize_text("黒\ufe00崎") == "黒崎"  # Variation Selectors
     assert normalize_text("黒\U000e0100崎") == "黒崎"  # Variation Selectors Supplement
+
+
+@pytest.mark.parametrize("for_irodori", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # ギリシャ文字のブロック内の未割り当て
+        ("\u0382Ｂ", "B"),
+        ("\u0382", ""),
+        ("あ\u0378\u0379い", "あい"),
+        ("α\u03a2β", "αβ"),
+        ("ギリシャ文字拡張\u1fffです", "ギリシャ文字拡張です"),
+        # ひらがな・かな拡張・かな補助のブロック内の未割り当て
+        ("ひらがな\u3040\u3097です", "ひらがなです"),
+        ("かな\U0001aff4です", "かなです"),
+        ("かな\U0001b123です", "かなです"),
+        # CJK 部首補助・康熙部首・CJK 互換漢字のブロック内の未割り当て
+        ("部首\u2e9a\u2fd6です", "部首です"),
+        ("互換漢字\ufa6eです", "互換漢字です"),
+        # CJK 拡張の間の未割り当て
+        ("拡張\U0002a6e0漢字", "拡張漢字"),
+        ("互換漢字補助\U0002fa1eです", "互換漢字補助です"),
+        # 数字に挟まれた未割り当てのコードポイントは、読めない記号と同じく数字を連結させずに削除する
+        ("1\u03782", "1'2"),
+    ],
+)
+def test_normalize_text_unassigned_code_points_in_kept_blocks_are_removed(
+    text: str, expected: str, for_irodori: bool
+) -> None:
+    """
+    正規化で残す文字種のブロックにある、未割り当てのコードポイント (一般カテゴリ Cn) が削除されることを確認する。
+    BERT のトークナイザーは一般カテゴリが C の文字を捨てるので、残すと word2ph の要素数と BERT のトークン数が食い違う。
+    入力のコードポイントは、Unicode 16.0 まで未割り当てのものを使う。
+    """
+
+    assert normalize_text(text, for_irodori=for_irodori) == expected
+    result = normalize_text(text, for_irodori=for_irodori, return_analysis_text=True)
+    assert isinstance(result, NormalizationResult)
+    assert result.analysis_text == expected
 
 
 def test_normalize_text_english():

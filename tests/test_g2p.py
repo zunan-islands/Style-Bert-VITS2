@@ -13,7 +13,11 @@ from pyopenjtalk import NJDFeature
 
 from preprocess_text import process_line
 from style_bert_vits2.constants import Languages
-from style_bert_vits2.nlp import InvalidPhoneError, clean_text_with_given_phone_tone
+from style_bert_vits2.nlp import (
+    InvalidPhoneError,
+    bert_models,
+    clean_text_with_given_phone_tone,
+)
 from style_bert_vits2.nlp.japanese.g2p import text_to_sep_kata
 from style_bert_vits2.nlp.japanese.g2p_utils import (
     kata_tone2phone_tone,
@@ -768,6 +772,45 @@ def test_g2p_passes_japanese_punctuation_to_pyopenjtalk() -> None:
     assert sep_kata is not None
     assert "ツギ" in sep_kata
     assert len(word2ph) == len(norm_text) + 2
+    _assert_phone_tone_word2ph_consistency(phones, tones, word2ph)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # 一般カテゴリ Cn (未割り当て) のコードポイントは、Unicode 16.0 まで未割り当てのものを使う
+        "\u0382Ｂ",  # ギリシャ文字のブロック内の未割り当て
+        "\u0382",
+        "今日は\u0378いい天気",
+        "あ\u0382\u0382い",  # 読めない文字が続くと、pyopenjtalk は1語にまとめる
+        "ひらがな\u3097です",  # ひらがなのブロック内の未割り当て
+        "かな\U0001b123です",  # かな補助のブロック内の未割り当て
+        "互換漢字\ufa6eです",  # CJK 互換漢字のブロック内の未割り当て
+        "拡張\U0002a6e0漢字",  # CJK 拡張 B と C の間の未割り当て
+        "番号は1\u03782です",
+    ],
+)
+def test_clean_text_word2ph_matches_bert_tokens_with_unassigned_code_points(
+    text: str,
+) -> None:
+    """
+    正規化で残す文字種のブロックにある未割り当てのコードポイントを含むテキストで、word2ph の要素数が BERT の入力のトークン数と一致することを確認する。
+    BERT のトークナイザーは一般カテゴリが C の文字を捨てる一方、pyopenjtalk は読めない文字に「'」の音素を割り当てるため、
+    正規化で残すと word2ph の要素数がトークン数より多くなり、extract_bert_feature_onnx() が BERT の特徴量を展開するところで IndexError になる。
+    """
+
+    _, phones, tones, word2ph, sep_text, _, _ = clean_text_with_given_phone_tone(
+        text=text,
+        language=Languages.JP,
+        use_jp_extra=True,
+        raise_yomi_error=False,
+    )
+
+    # extract_bert_feature() と同じく、単語単位の単語のリストを連結したテキストをトークナイズする
+    assert sep_text is not None
+    input_ids = bert_models.load_tokenizer(Languages.JP)("".join(sep_text))["input_ids"]
+    assert len(input_ids) == len(word2ph)
+    assert len(word2ph) == len("".join(sep_text)) + 2
     _assert_phone_tone_word2ph_consistency(phones, tones, word2ph)
 
 

@@ -1386,6 +1386,46 @@ __JAPANESE_TEXT_CLEANUP_CHAR_CLASS = (
     + r"\u3005-\u3007\u3031-\u3035\u303B"
     + __CJK_TEXT_CLEANUP_CHAR_CLASS
 )
+# 正規化後に残すギリシャ文字の範囲
+__GREEK_TEXT_CLEANUP_CHAR_CLASS = r"\u0370-\u03FF\u1F00-\u1FFF"
+# 上の日本語文字とギリシャ文字の範囲にある、一般カテゴリが C の文字 (未割り当てのコードポイントなど)
+## 範囲はブロック単位なので、U+0378・U+0382 (ギリシャ文字) や U+2EBE1 以降 (CJK 拡張) のような未割り当てのコードポイントも含む
+## BERT のトークナイザーは一般カテゴリが C の文字を捨てる (transformers の BasicTokenizer._clean_text()) 一方、pyopenjtalk は読めない文字に「'」の音素を割り当てる
+## 残すと word2ph の要素数が BERT のトークン数より多くなり、BERT の特徴量を音素ごとに展開するところで IndexError などになる
+## 未割り当てかどうかは Python の unicodedata の版で変わり、トークナイザーも同じ unicodedata で判定するので、固定の表にせず実行時に求める
+## 残す範囲は第3面 (U+3FFFF) までにしかないので、そこまでを調べる
+__UNREADABLE_CODE_POINTS_IN_CLEANUP_RANGES = frozenset(
+    code_point
+    for code_point in range(0x40000)
+    if unicodedata.category(chr(code_point))[0] == "C"
+    and re.fullmatch(
+        r"["
+        + __JAPANESE_TEXT_CLEANUP_CHAR_CLASS
+        + __GREEK_TEXT_CLEANUP_CHAR_CLASS
+        + r"]",
+        chr(code_point),
+    )
+    is not None
+)
+# 上の文字を、連続するコードポイントの範囲ごとにまとめた文字クラス
+__UNREADABLE_CLEANUP_CHAR_CLASS = "".join(
+    rf"\U{start:08X}-\U{end:08X}"
+    for start, end in zip(
+        sorted(
+            code_point
+            for code_point in __UNREADABLE_CODE_POINTS_IN_CLEANUP_RANGES
+            if code_point - 1 not in __UNREADABLE_CODE_POINTS_IN_CLEANUP_RANGES
+        ),
+        sorted(
+            code_point
+            for code_point in __UNREADABLE_CODE_POINTS_IN_CLEANUP_RANGES
+            if code_point + 1 not in __UNREADABLE_CODE_POINTS_IN_CLEANUP_RANGES
+        ),
+    )
+)
+# 残す文字種のパターンの末尾
+## 残す文字種の範囲外の文字に加えて、範囲内の一般カテゴリが C の文字も削除する
+__PUNCTUATION_CLEANUP_PATTERN_SUFFIX = r"]|[" + __UNREADABLE_CLEANUP_CHAR_CLASS + r"])+"
 # 二の字点の展開元として扱う漢字範囲
 ## pyopenjtalk は 〻 を読みへ展開しないため、漢字の直後だけ前の漢字を繰り返す
 __IDEOGRAPHIC_ITERATION_BASE_PATTERN = re.compile(
@@ -1393,7 +1433,7 @@ __IDEOGRAPHIC_ITERATION_BASE_PATTERN = re.compile(
 )
 # 正規化後に残す文字種を表すパターン
 __PUNCTUATION_CLEANUP_PATTERN = re.compile(
-    r"[^"
+    r"(?:[^"
     + __JAPANESE_TEXT_CLEANUP_CHAR_CLASS
     # ↓ 半角数字
     + r"\u0030-\u0039"
@@ -1404,7 +1444,7 @@ __PUNCTUATION_CLEANUP_PATTERN = re.compile(
     # ↓ 全角アルファベット（大文字と小文字）
     + r"\uFF21-\uFF3A\uFF41-\uFF5A"
     # ↓ ギリシャ文字
-    + r"\u0370-\u03FF\u1F00-\u1FFF"
+    + __GREEK_TEXT_CLEANUP_CHAR_CLASS
     # ↓ PUNCTUATIONS (symbols.py) で定義された半角記号種。但し `…` はすでに `...` に変換されている
     # スラッシュは pyopenjtalk での形態素解析処理で重要なので、例外的に正規化後も残す (g2p 処理内で "." に変換される)
     # pyopenjtalk は「漢字の直後に2つ以上の連続する半角ハイフンがある場合」にその漢字の読みが取得できなくなる謎のバグがあるため、
@@ -1412,7 +1452,7 @@ __PUNCTUATION_CLEANUP_PATTERN = re.compile(
     # @ と & は OpenJTalk が記号として読めるため、カタカナに潰さず分かち書きへ渡す
     ## OpenJTalk の解析結果から再度 replace_punctuation() を通す経路では全角記号が来るため、半角・全角の両方を残す
     + "".join(re.escape(p) for p in (PUNCTUATIONS + ["/", "—", "@", "＠", "&", "＆"]))
-    + r"]+"
+    + __PUNCTUATION_CLEANUP_PATTERN_SUFFIX
 )
 # 解析用テキストで、音素用の「,」「.」へ置き換えずに残す句読点
 ## pyopenjtalk は漢数字や数字の直後の半角「,」「.」を桁区切りや小数点として読むので、形態素解析には「、」「。」のまま渡す
@@ -1426,10 +1466,14 @@ __ANALYSIS_NUMBER_MIDDLE_DOT_PATTERN = re.compile(
 )
 # 解析用テキストで残す文字種を表すパターン (「、」「。」と、数の間の「・」も残す)
 __ANALYSIS_PUNCTUATION_CLEANUP_PATTERN = re.compile(
-    __PUNCTUATION_CLEANUP_PATTERN.pattern.removesuffix(r"]+") + r"、。・]+"
+    __PUNCTUATION_CLEANUP_PATTERN.pattern.removesuffix(
+        __PUNCTUATION_CLEANUP_PATTERN_SUFFIX
+    )
+    + r"、。・"
+    + __PUNCTUATION_CLEANUP_PATTERN_SUFFIX
 )
 __IRODORI_PUNCTUATION_CLEANUP_PATTERN = re.compile(
-    r"[^"
+    r"(?:[^"
     + __JAPANESE_TEXT_CLEANUP_CHAR_CLASS
     # ↓ 半角数字
     + r"\u0030-\u0039"
@@ -1440,7 +1484,7 @@ __IRODORI_PUNCTUATION_CLEANUP_PATTERN = re.compile(
     # ↓ 全角アルファベット（大文字と小文字）
     + r"\uFF21-\uFF3A\uFF41-\uFF5A"
     # ↓ ギリシャ文字
-    + r"\u0370-\u03FF\u1F00-\u1FFF"
+    + __GREEK_TEXT_CLEANUP_CHAR_CLASS
     # ↓ Irodori-TTS 側で自然な間として扱わせたい日本語記号
     + "".join(
         re.escape(p)
@@ -1465,11 +1509,15 @@ __IRODORI_PUNCTUATION_CLEANUP_PATTERN = re.compile(
             ]
         )
     )
-    + r"]+"
+    + __PUNCTUATION_CLEANUP_PATTERN_SUFFIX
 )
 # Irodori-TTS 向けの解析用テキストで残す文字種を表すパターン (数の間の「・」も残す)
 __IRODORI_ANALYSIS_PUNCTUATION_CLEANUP_PATTERN = re.compile(
-    __IRODORI_PUNCTUATION_CLEANUP_PATTERN.pattern.removesuffix(r"]+") + r"・]+"
+    __IRODORI_PUNCTUATION_CLEANUP_PATTERN.pattern.removesuffix(
+        __PUNCTUATION_CLEANUP_PATTERN_SUFFIX
+    )
+    + r"・"
+    + __PUNCTUATION_CLEANUP_PATTERN_SUFFIX
 )
 
 
